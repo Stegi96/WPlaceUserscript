@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.19
+// @version      1.20
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -174,8 +174,26 @@
         const scale = Number(cam.scale) || 1;
         const centerOffsetX = rect.width / 2;
         const centerOffsetY = rect.height / 2;
-        // Größe des kleinen Quadrats (als Anteil des Zooms)
-        const box = Math.max(1, Math.floor(scale * 0.5));
+        // Versuche die Bildschirmgröße eines Weltpixels in CSS-Pixeln zu bestimmen
+        // 1) aus Canvas CSS-Scale pro Canvas-Pixel
+        const cssPerCanvasPx = (canvas.width > 0) ? (rect.width / canvas.width) : 1;
+        // 2) aus transform-Matrix (falls vorhanden)
+        let cssScaleFromTransform = 1;
+        try {
+            const m = getComputedStyle(canvas).transform;
+            if (m && m !== 'none') {
+                const mm = m.match(/matrix\(([-0-9.eE,\s]+)\)/);
+                if (mm) {
+                    const parts = mm[1].split(',').map(s=>parseFloat(s));
+                    const a = parts[0], b = parts[1];
+                    cssScaleFromTransform = Math.max(1, Math.hypot(a, b));
+                }
+            }
+        } catch {}
+        // 3) Kamera-Scale kann abweichen; wir nehmen die beste verfügbare Schätzung
+        const cssPerWorldPx = Math.max(cssPerCanvasPx, cssScaleFromTransform, scale);
+        // Kastenbreite als Anteil des sichtbaren Weltpixels (z.B. 60%)
+        const box = Math.max(1, Math.floor(cssPerWorldPx * 0.6));
         const half = Math.floor(box / 2);
 
         for (const ov of Object.values(overlays)) {
