@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "overlays": [
+    {
+        "version": 1,
+        "name": "emily",
+        "imageUrl": "https://cdn.discordapp.com/attachments/315450359235477505/1410618988165332992/emily.png?ex=68b1acce&is=68b05b4e&hm=be8716a082c9aa641a9d4d6689ead090e59e028e5f9927fab38a0a5837de3e13&",
+        "pixelUrl": "https://backend.wplace.live/s0/pixel/1088/678?x=254&y=673",
+        "offsetX": 0,
+        "offsetY": 0,
+        "opacity": 0.7
+    }
+  ]
+}
