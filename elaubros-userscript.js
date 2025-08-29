@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.26
+// @version      1.27
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -382,16 +382,13 @@
                 // Zeichne Originaltile
                 ctx.drawImage(tileImg, 0, 0, TILE_SIZE, TILE_SIZE);
 
-                // Für Minify: vorbereiteter hochskalierter Canvas
-                let minCanvas = null, mctx = null, SS = 3, Center = 1;
+                // Für Minify: arbeite direkt im Ziel-ImageData mit symbolischer Mischdeckung
+                const SS = 5; // Super-Sampling Referenzgröße
+                const SYMBOL_CELLS = 5; // Kreuz 3x3 mit Mitte doppelt gezählt -> 5 Zellen wirksam
+                const COVERAGE = SYMBOL_CELLS / (SS * SS); // ~0.2
+                let destImageData = null;
                 if (settings.renderMode === 'minify') {
-                    SS = 5; Center = Math.floor(SS/2);
-                    minCanvas = document.createElement('canvas');
-                    minCanvas.width = TILE_SIZE * SS;
-                    minCanvas.height = TILE_SIZE * SS;
-                    mctx = minCanvas.getContext('2d', { willReadFrequently: true });
-                    mctx.imageSmoothingEnabled = false;
-                    mctx.drawImage(tileImg, 0, 0, minCanvas.width, minCanvas.height);
+                    destImageData = ctx.getImageData(0, 0, TILE_SIZE, TILE_SIZE);
                 }
 
                 const tileOriginX = chunk1 * TILE_SIZE;
@@ -404,14 +401,15 @@
                         continue; // komplett außerhalb dieses Tiles
                     }
                     const opacity = Number(ov.opacity ?? 0.5);
-                    if (settings.renderMode === 'minify' && mctx) {
-                        // Symbols: kleines Kreuz im Zentrum jedes Overlay-Pixels (Super-Sampling -> Downscale)
+                    if (settings.renderMode === 'minify' && destImageData) {
+                        // Symbols: pro Overlay-Pixel mische 20% des Zielpixels mit Overlay-Farbe (Kreuz-Coverage)
                         const srcCanvas = (settings.paletteMatch && ov.processedCanvas) ? ov.processedCanvas : (() => {
                             const c=document.createElement('canvas'); c.width=ov.img.naturalWidth; c.height=ov.img.naturalHeight; const cx=c.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=false; cx.drawImage(ov.img,0,0); return c; })();
                         const sctx = srcCanvas.getContext('2d', { willReadFrequently: true });
                         const sw = srcCanvas.width, sh = srcCanvas.height;
                         const imgd = sctx.getImageData(0, 0, sw, sh);
                         const data = imgd.data; const rowW = imgd.width;
+                        const dest = destImageData.data;
                         let drawn = 0;
                         for (let y=0; y<sh; y++) {
                             const ty = drawY + y;
@@ -422,17 +420,16 @@
                                 const i = (y*rowW + x) * 4;
                                 const a = data[i+3]; if (a === 0) continue;
                                 const r=data[i], g=data[i+1], b=data[i+2];
-                                mctx.globalAlpha = (a/255) * opacity;
-                                mctx.fillStyle = `rgb(${r},${g},${b})`;
-                                const baseX = tx * SS + Center;
-                                const baseY = ty * SS + Center;
-                                // Kreuzsymbol (3x3) im Zentrum
-                                mctx.fillRect(baseX-1, baseY, 3, 1);
-                                mctx.fillRect(baseX, baseY-1, 1, 3);
+                                const di = (ty * TILE_SIZE + tx) * 4;
+                                const alpha = COVERAGE * opacity * (a / 255);
+                                // linear blend dest <- (1-alpha)*dest + alpha*src
+                                dest[di+0] = Math.round(dest[di+0] * (1 - alpha) + r * alpha);
+                                dest[di+1] = Math.round(dest[di+1] * (1 - alpha) + g * alpha);
+                                dest[di+2] = Math.round(dest[di+2] * (1 - alpha) + b * alpha);
+                                // keep dest[di+3] as opaque (255)
                                 drawn++;
                             }
                         }
-                        mctx.globalAlpha = 1;
                         try { console.debug('ELAUBros minify symbols drawn', drawn, 'on chunk', chunk1, chunk2); } catch {}
                     } else {
                         // Normalmodus: komplettes Bild einzeichnen
@@ -442,13 +439,8 @@
                         ctx.globalAlpha = 1;
                     }
                 }
-
-                // Bei Minify: Downscale auf finalen Tile-Canvas (enthält bereits Originaltile)
-                if (settings.renderMode === 'minify' && minCanvas) {
-                    ctx.imageSmoothingEnabled = false;
-                    // Ersetze den Canvas-Inhalt mit der minifizierten Version (inkl. Tile-Hintergrund)
-                    ctx.clearRect(0,0,TILE_SIZE,TILE_SIZE);
-                    ctx.drawImage(minCanvas, 0, 0, TILE_SIZE, TILE_SIZE);
+                if (settings.renderMode === 'minify' && destImageData) {
+                    ctx.putImageData(destImageData, 0, 0);
                 }
 
                 return await new Promise((resolve, reject) => {
