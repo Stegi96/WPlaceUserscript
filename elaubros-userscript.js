@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.6
+// @version      1.7
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
+// @grant        unsafeWindow
 // @connect      raw.githubusercontent.com
 // ==/UserScript==
 
@@ -77,9 +78,12 @@
 
     // Hilfsfunktion: Kamera-Infos holen (wie Overlay Pro)
     function getCamera() {
-        if (window.store && window.store.state && window.store.state.camera) {
-            return window.store.state.camera;
-        }
+        try {
+            const w = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
+            if (w.store && w.store.state && w.store.state.camera) {
+                return w.store.state.camera;
+            }
+        } catch (e) { /* ignore */ }
         return null;
     }
 
@@ -89,16 +93,24 @@
         const overlayY = parseInt(img.dataset.pixelY) + (parseInt(img.dataset.offsetY) || 0);
 
         const camera = getCamera();
-        if (!camera) return;
-
-        // Berechne Bildschirmposition in CSS-Pixeln (ohne CSS-Transform übernehmen)
-        const scale = camera.scale || 1;
-        const screenX = (overlayX - camera.x) * scale;
-        const screenY = (overlayY - camera.y) * scale;
+        if (!camera) {
+            // Fallback: Lege einfach im Canvas-Koordinatensystem ab (ggf. ungenau bei Zoom)
+            return positionOverlayOnCanvas(img);
+        }
 
         // Finde das Spielfeld-Canvas
         const canvas = findWplaceCanvas();
         if (!canvas) return;
+
+        // Viewport-Rechteck des Canvas (CSS-Pixel)
+        const rect = canvas.getBoundingClientRect();
+
+        // Berechne Bildschirmposition in CSS-Pixeln; Kamera ist meist auf das Zentrum bezogen
+        const scale = camera.scale || 1;
+        const centerOffsetX = rect.width / 2;
+        const centerOffsetY = rect.height / 2;
+        const screenX = (overlayX - camera.x) * scale + centerOffsetX;
+        const screenY = (overlayY - camera.y) * scale + centerOffsetY;
 
         // Overlay-Layer erzeugen (nur einmal, als Geschwister vom Canvas)
         let overlayLayer = document.getElementById("elaubros-overlay-layer");
@@ -112,7 +124,6 @@
         }
 
         // Overlay-Layer exakt über das Canvas im Viewport platzieren (in Seitenkoordinaten)
-        const rect = canvas.getBoundingClientRect();
         const docLeft = window.scrollX + rect.left;
         const docTop = window.scrollY + rect.top;
         overlayLayer.style.left = docLeft + "px";
@@ -133,9 +144,9 @@
         }
 
         // Overlay-Bild exakt auf die berechnete Position legen
-        img.style.left = `${screenX}px`;
-        img.style.top = `${screenY}px`;
-        img.style.transform = ""; // kein eigenes scale!
+        img.style.left = `${Math.round(screenX)}px`;
+        img.style.top = `${Math.round(screenY)}px`;
+        img.style.transform = `scale(${scale})`;
         img.style.transformOrigin = "top left";
     }
 
