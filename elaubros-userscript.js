@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.3
+// @version      1.4
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -45,9 +45,76 @@
             canvas.parentElement.insertBefore(overlayLayer, canvas.nextSibling);
         }
 
-        // Overlay-Layer exakt wie das Canvas positionieren und transformieren
-        overlayLayer.style.left = canvas.style.left;
-        overlayLayer.style.top = canvas.style.top;
+        // Exakte Position und Größe des Canvas im Dokument bestimmen
+        const rect = canvas.getBoundingClientRect();
+        const docLeft = window.scrollX + rect.left;
+        const docTop = window.scrollY + rect.top;
+
+        overlayLayer.style.left = docLeft + "px";
+        overlayLayer.style.top = docTop + "px";
+        overlayLayer.style.width = rect.width + "px";
+        overlayLayer.style.height = rect.height + "px";
+
+        // Transformation übernehmen (wichtig!)
+        const style = window.getComputedStyle(canvas);
+        overlayLayer.style.transform = style.transform;
+        overlayLayer.style.transformOrigin = style.transformOrigin;
+
+        // Overlay-Bild einfügen (nur einmal)
+        if (img.parentElement !== overlayLayer) {
+            overlayLayer.appendChild(img);
+            img.style.position = "absolute";
+            img.style.pointerEvents = "none";
+            img.style.zIndex = 1;
+        }
+
+        // Overlay-Bild exakt auf die gewünschte Pixelposition legen
+        img.style.left = (pixelX + offsetX) + "px";
+        img.style.top = (pixelY + offsetY) + "px";
+        img.style.transform = ""; // kein eigenes scale!
+        img.style.transformOrigin = "top left";
+    }
+
+    // Hilfsfunktion: Kamera-Infos holen (wie Overlay Pro)
+    function getCamera() {
+        if (window.store && window.store.state && window.store.state.camera) {
+            return window.store.state.camera;
+        }
+        return null;
+    }
+
+    // Positionierung wie Overlay Pro: Weltkoordinaten → Bildschirmkoordinaten
+    function positionOverlayLikeOverlayPro(img) {
+        const overlayX = parseInt(img.dataset.pixelX) + (parseInt(img.dataset.offsetX) || 0);
+        const overlayY = parseInt(img.dataset.pixelY) + (parseInt(img.dataset.offsetY) || 0);
+
+        const camera = getCamera();
+        if (!camera) return;
+
+        // Berechne Bildschirmposition
+        const scale = camera.scale || 1;
+        const screenX = (overlayX - camera.x) * scale;
+        const screenY = (overlayY - camera.y) * scale;
+
+        // Finde das Spielfeld-Canvas
+        const canvas = findWplaceCanvas();
+        if (!canvas) return;
+
+        // Overlay-Layer erzeugen (nur einmal, als Geschwister vom Canvas)
+        let overlayLayer = document.getElementById("elaubros-overlay-layer");
+        if (!overlayLayer) {
+            overlayLayer = document.createElement("div");
+            overlayLayer.id = "elaubros-overlay-layer";
+            overlayLayer.style.position = "absolute";
+            overlayLayer.style.pointerEvents = "none";
+            overlayLayer.style.zIndex = 9999;
+            canvas.parentElement.appendChild(overlayLayer);
+        }
+
+        // Overlay-Layer exakt über das Canvas legen
+        const rect = canvas.getBoundingClientRect();
+        overlayLayer.style.left = canvas.offsetLeft + "px";
+        overlayLayer.style.top = canvas.offsetTop + "px";
         overlayLayer.style.width = canvas.width + "px";
         overlayLayer.style.height = canvas.height + "px";
         overlayLayer.style.transform = canvas.style.transform;
@@ -61,9 +128,9 @@
             img.style.zIndex = 1;
         }
 
-        // Overlay-Bild exakt auf die gewünschte Pixelposition legen
-        img.style.left = (pixelX + offsetX) + "px";
-        img.style.top = (pixelY + offsetY) + "px";
+        // Overlay-Bild exakt auf die berechnete Position legen
+        img.style.left = `${screenX}px`;
+        img.style.top = `${screenY}px`;
         img.style.transform = ""; // kein eigenes scale!
         img.style.transformOrigin = "top left";
     }
@@ -192,7 +259,7 @@
                 setInterval(() => {
                     Object.values(overlays).forEach(img => {
                         if (img.style.display !== "none") {
-                            positionOverlayOnCanvas(img);
+                            positionOverlayLikeOverlayPro(img);(img);
                         }
                     });
                 }, 200);
@@ -200,7 +267,7 @@
                 window.addEventListener("resize", () => {
                     Object.values(overlays).forEach(img => {
                         if (img.style.display !== "none") {
-                            positionOverlayOnCanvas(img);
+                            positionOverlayLikeOverlayPro(img);
                         }
                     });
                 });
