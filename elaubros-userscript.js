@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.25
+// @version      1.26
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -11,6 +11,8 @@
 // @connect      raw.githubusercontent.com
 // @connect      cdn.discordapp.com
 // @connect      media.discordapp.net
+// @run-at       document-start
+// @inject-into  page
 // ==/UserScript==
 
 (function() {
@@ -349,7 +351,7 @@
 
         const TILE_SIZE = 1000;
         const page = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
-        const origFetch = (page.fetch || window.fetch).bind(page);
+        const NATIVE_FETCH = (page.fetch || window.fetch).bind(page);
 
         function matchTileUrl(urlStr) {
             try {
@@ -461,8 +463,8 @@
         const hookedFetch = async function(input, init) {
             const url = typeof input === 'string' ? input : input?.url || '';
             const match = matchTileUrl(url);
-            if (!match) return origFetch(input, init);
-            const res = await origFetch(input, init);
+            if (!match) return NATIVE_FETCH(input, init);
+            const res = await NATIVE_FETCH(input, init);
             try {
                 const ct = res.headers.get('content-type') || '';
                 if (!ct.includes('image')) return res;
@@ -479,6 +481,32 @@
         // In Page-Kontext hängen
         page.fetch = hookedFetch;
         window.fetch = hookedFetch;
+
+        // Zusätzlich: Image.src-Hook, falls Tiles via <img> geladen werden
+        try {
+            const desc = Object.getOwnPropertyDescriptor(Image.prototype, 'src');
+            if (desc && desc.configurable) {
+                Object.defineProperty(Image.prototype, 'src', {
+                    get: function() { return desc.get.call(this); },
+                    set: function(v) {
+                        try {
+                            const val = String(v);
+                            const m = matchTileUrl(val);
+                            if (m) {
+                                // Lade Original, compose, ersetze durch Blob-URL
+                                NATIVE_FETCH(val).then(r => r.blob()).then(b => composeTile(b, m.chunk1, m.chunk2)).then(finalBlob => {
+                                    const url = URL.createObjectURL(finalBlob);
+                                    desc.set.call(this, url);
+                                }).catch(() => desc.set.call(this, val));
+                                return;
+                            }
+                        } catch {}
+                        return desc.set.call(this, v);
+                    }
+                });
+                console.debug('ELAUBros Image.src hook installed');
+            }
+        } catch (e) { try { console.warn('ELAUBros Image hook failed', e); } catch {} }
     }
 
     // Menü erstellen
