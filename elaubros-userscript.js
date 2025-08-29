@@ -23,21 +23,7 @@
         return canvases.sort((a, b) => (b.width * b.height) - (a.width * a.height))[0];
     }
 
-    // Transformation des Canvas-Containers auslesen
-    function getCanvasTransformInfo(canvas) {
-        let el = canvas.parentElement;
-        while (el && el !== document.body) {
-            const style = window.getComputedStyle(el);
-            const transform = style.transform || style.webkitTransform;
-            if (transform && transform !== "none") {
-                return {container: el, transform};
-            }
-            el = el.parentElement;
-        }
-        return {container: canvas.parentElement, transform: ""};
-    }
-
-    // Overlay-Positionierung auf Canvas-Container
+    // Overlay direkt über das Canvas legen und synchron transformieren
     function positionOverlayOnCanvas(img) {
         const pixelX = parseInt(img.dataset.pixelX);
         const pixelY = parseInt(img.dataset.pixelY);
@@ -47,33 +33,43 @@
         const canvas = findWplaceCanvas();
         if (!canvas) return;
 
-        const {container, transform} = getCanvasTransformInfo(canvas);
+        // Overlay-Container erzeugen (nur einmal)
+        let overlayLayer = document.getElementById("elaubros-overlay-layer");
+        if (!overlayLayer) {
+            overlayLayer = document.createElement("div");
+            overlayLayer.id = "elaubros-overlay-layer";
+            overlayLayer.style.position = "absolute";
+            overlayLayer.style.left = "0";
+            overlayLayer.style.top = "0";
+            overlayLayer.style.pointerEvents = "none";
+            overlayLayer.style.zIndex = 9999;
+            canvas.parentElement.appendChild(overlayLayer);
+        }
 
-        // Füge das Overlay dem Container hinzu (nur einmal)
-        if (!img.parentElement || img.parentElement !== container) {
-            container.appendChild(img);
+        // Overlay-Bild einfügen (nur einmal)
+        if (img.parentElement !== overlayLayer) {
+            overlayLayer.appendChild(img);
             img.style.position = "absolute";
             img.style.pointerEvents = "none";
-            img.style.zIndex = 9999;
+            img.style.zIndex = 1;
         }
 
-        // Transformation auslesen
-        let scale = 1, transX = 0, transY = 0;
-        if (transform && transform.startsWith("matrix")) {
-            // matrix(a, b, c, d, tx, ty)
-            const m = transform.match(/matrix\(([^)]+)\)/);
-            if (m) {
-                const vals = m[1].split(',').map(Number);
-                scale = vals[0];
-                transX = vals[4];
-                transY = vals[5];
-            }
-        }
+        // Overlay-Layer exakt über das Canvas legen
+        const rect = canvas.getBoundingClientRect();
+        overlayLayer.style.width = canvas.width + "px";
+        overlayLayer.style.height = canvas.height + "px";
+        overlayLayer.style.left = canvas.offsetLeft + "px";
+        overlayLayer.style.top = canvas.offsetTop + "px";
 
-        // Position berechnen (im Container)
-        img.style.left = ((pixelX + offsetX) * scale + transX) + "px";
-        img.style.top  = ((pixelY + offsetY) * scale + transY) + "px";
-        img.style.transform = `scale(${scale})`;
+        // Transformation übernehmen
+        const style = window.getComputedStyle(canvas);
+        overlayLayer.style.transform = style.transform;
+        overlayLayer.style.transformOrigin = style.transformOrigin;
+
+        // Overlay-Bild exakt auf die gewünschte Pixelposition legen
+        img.style.left = (pixelX + offsetX) + "px";
+        img.style.top = (pixelY + offsetY) + "px";
+        img.style.transform = ""; // kein eigenes scale!
         img.style.transformOrigin = "top left";
     }
 
