@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.27
+// @version      1.28
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -421,12 +421,12 @@
                                 const a = data[i+3]; if (a === 0) continue;
                                 const r=data[i], g=data[i+1], b=data[i+2];
                                 const di = (ty * TILE_SIZE + tx) * 4;
-                                const alpha = COVERAGE * opacity * (a / 255);
-                                // linear blend dest <- (1-alpha)*dest + alpha*src
-                                dest[di+0] = Math.round(dest[di+0] * (1 - alpha) + r * alpha);
-                                dest[di+1] = Math.round(dest[di+1] * (1 - alpha) + g * alpha);
-                                dest[di+2] = Math.round(dest[di+2] * (1 - alpha) + b * alpha);
-                                // keep dest[di+3] as opaque (255)
+                                // Stärkerer, klar sichtbarer Dot: volle Farbe mit kräftiger Mischung
+                                const alpha = Math.max(0.75, (a / 255) * opacity); // >= 75% sichtbar
+                                dest[di+0] = Math.round(r * alpha + dest[di+0] * (1 - alpha));
+                                dest[di+1] = Math.round(g * alpha + dest[di+1] * (1 - alpha));
+                                dest[di+2] = Math.round(b * alpha + dest[di+2] * (1 - alpha));
+                                dest[di+3] = 255;
                                 drawn++;
                             }
                         }
