@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.4
+// @version      1.5
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -241,7 +241,7 @@
                         const img = overlays[name];
                         img.style.display = e.target.checked ? "block" : "none";
                         if (e.target.checked) {
-                            positionOverlayOnCanvas(img);
+                            positionOverlayLikeOverlayPro(img);
                         }
                     });
 
@@ -259,7 +259,7 @@
                 setInterval(() => {
                     Object.values(overlays).forEach(img => {
                         if (img.style.display !== "none") {
-                            positionOverlayLikeOverlayPro(img);(img);
+                            positionOverlayLikeOverlayPro(img);
                         }
                     });
                 }, 200);
