@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.30
+// @version      1.31
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -382,15 +382,19 @@
                 // Zeichne Originaltile
                 ctx.drawImage(tileImg, 0, 0, TILE_SIZE, TILE_SIZE);
 
-                // Für Minify: zeichne nur Symbolpunkte im hochskalierten Raum (performant: iteriere nur Overlay-Pixel)
-                const MIN_SCALE = 5; // Zellgröße
-                let dotCanvas = null, dotCtx = null;
+                // Für Minify: skaliere die Tile hoch (z.B. 5x) und setze Dots im Zellzentrum
+                const MIN_SCALE = 5; // wie Overlay Pro (Zellgröße)
+                let scaledCanvas = null, scaledCtx = null;
                 if (settings.renderMode === 'minify') {
-                    dotCanvas = document.createElement('canvas');
-                    dotCanvas.width = TILE_SIZE * MIN_SCALE;
-                    dotCanvas.height = TILE_SIZE * MIN_SCALE;
-                    dotCtx = dotCanvas.getContext('2d', { willReadFrequently: true });
-                    dotCtx.imageSmoothingEnabled = false;
+                    const tileW = TILE_SIZE * MIN_SCALE;
+                    const tileH = TILE_SIZE * MIN_SCALE;
+                    scaledCanvas = document.createElement('canvas');
+                    scaledCanvas.width = tileW;
+                    scaledCanvas.height = tileH;
+                    scaledCtx = scaledCanvas.getContext('2d', { willReadFrequently: true });
+                    scaledCtx.imageSmoothingEnabled = false;
+                    // Originaltile hochskaliert als Basis zeichnen
+                    scaledCtx.drawImage(tileImg, 0, 0, tileW, tileH);
                 }
 
                 const tileOriginX = chunk1 * TILE_SIZE;
@@ -403,7 +407,7 @@
                         continue; // komplett außerhalb dieses Tiles
                     }
                     const opacity = Number(ov.opacity ?? 0.5);
-                    if (settings.renderMode === 'minify' && dotCtx) {
+                    if (settings.renderMode === 'minify' && scaledCtx) {
                         // Quelle: quantisierte oder Original-Overlay-Canvas
                         const srcCanvas = (settings.paletteMatch && ov.processedCanvas) ? ov.processedCanvas : (() => {
                             const c=document.createElement('canvas'); c.width=ov.img.naturalWidth; c.height=ov.img.naturalHeight; const cx=c.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=false; cx.drawImage(ov.img,0,0); return c; })();
@@ -422,13 +426,12 @@
                                 const idx = (y*rowW + x) * 4;
                                 const a = data[idx+3]; if (a === 0) continue;
                                 const r=data[idx], g=data[idx+1], b=data[idx+2];
-                                dotCtx.globalAlpha = (a/255) * opacity;
-                                dotCtx.fillStyle = `rgb(${r},${g},${b})`;
+                                scaledCtx.globalAlpha = (a/255) * opacity;
+                                scaledCtx.fillStyle = `rgb(${r},${g},${b})`;
                                 const baseX = tx * MIN_SCALE + center;
                                 const baseY = ty * MIN_SCALE + center;
-                                // kleines Kreuz (3x3) im Zentrum der 5x5-Zelle
-                                dotCtx.fillRect(baseX-1, baseY, 3, 1);
-                                dotCtx.fillRect(baseX, baseY-1, 1, 3);
+                                // Punkt im Zentrum (1x1 Pixel im hochskalierten Raum)
+                                scaledCtx.fillRect(baseX, baseY, 1, 1);
                                 drawn++;
                             }
                         }
@@ -441,10 +444,12 @@
                         ctx.globalAlpha = 1;
                     }
                 }
-                if (settings.renderMode === 'minify' && dotCanvas) {
-                    // Dot-Layer auf die Originaltile blenden (nearest-neighbor)
-                    ctx.imageSmoothingEnabled = false;
-                    ctx.drawImage(dotCanvas, 0, 0, dotCanvas.width, dotCanvas.height, 0, 0, TILE_SIZE, TILE_SIZE);
+                if (settings.renderMode === 'minify' && scaledCanvas) {
+                    // Ersetze die Tile durch die hochskalierte Version (Seite skaliert beim Rendern herunter)
+                    // Exportiere direkt den Inhalt der skalierten Canvas
+                    return await new Promise((resolve, reject) => {
+                        scaledCanvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed (scaled)')), 'image/png');
+                    });
                 }
 
                 return await new Promise((resolve, reject) => {
