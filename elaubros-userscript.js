@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.13
+// @version      1.14
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -202,13 +202,18 @@
         window._elaubros_hook_installed = true;
 
         const TILE_SIZE = 1000;
-        const origFetch = window.fetch.bind(window);
+        const page = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
+        const origFetch = (page.fetch || window.fetch).bind(page);
 
         function matchTileUrl(urlStr) {
             try {
                 const u = new URL(urlStr, location.href);
-                if (u.hostname !== "backend.wplace.live" || !u.pathname.startsWith("/files/")) return null;
-                const m = u.pathname.match(/\/(\d+)\/(\d+)\.png$/i);
+                if (u.hostname !== "backend.wplace.live") return null;
+                // Beispiele:
+                //  - /files/s0/tiles/1088/678.png
+                //  - /files/1088/678.png   (Fallback)
+                let m = u.pathname.match(/\/files\/[^/]+\/tiles\/(\d+)\/(\d+)\.png$/i);
+                if (!m) m = u.pathname.match(/\/(\d+)\/(\d+)\.png$/i);
                 if (!m) return null;
                 return { chunk1: parseInt(m[1], 10), chunk2: parseInt(m[2], 10) };
             } catch { return null; }
@@ -251,7 +256,7 @@
             }
         }
 
-        window.fetch = async function(input, init) {
+        const hookedFetch = async function(input, init) {
             const url = typeof input === 'string' ? input : input?.url || '';
             const match = matchTileUrl(url);
             if (!match) return origFetch(input, init);
@@ -260,6 +265,8 @@
                 const ct = res.headers.get('content-type') || '';
                 if (!ct.includes('image')) return res;
                 const blob = await res.clone().blob();
+                // Debug: signal that hook is active
+                try { console.debug('ELAUBros hook composing tile', url, match); } catch {}
                 const finalBlob = await composeTile(blob, match.chunk1, match.chunk2);
                 return new Response(finalBlob, { status: res.status, statusText: res.statusText, headers: { 'Content-Type': 'image/png' } });
             } catch (e) {
@@ -267,6 +274,9 @@
                 return res;
             }
         };
+        // In Page-Kontext hängen
+        page.fetch = hookedFetch;
+        window.fetch = hookedFetch;
     }
 
     // Menü erstellen
