@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.18
+// @version      1.19
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -120,6 +120,88 @@
             }
         } catch (e) { /* ignore */ }
         return null;
+    }
+
+    // Minify DOM-Layer (kleine Quadrate in Pixelmitte)
+    function ensureMinifyLayer(rect) {
+        let layer = document.getElementById('elaubros-minify-layer');
+        if (!layer) {
+            layer = document.createElement('canvas');
+            layer.id = 'elaubros-minify-layer';
+            layer.style.position = 'fixed';
+            layer.style.pointerEvents = 'none';
+            layer.style.zIndex = 999998;
+            layer.style.imageRendering = 'pixelated';
+            document.body.appendChild(layer);
+        }
+        if (rect) {
+            layer.style.left = rect.left + 'px';
+            layer.style.top = rect.top + 'px';
+            layer.width = Math.max(1, Math.floor(rect.width));
+            layer.height = Math.max(1, Math.floor(rect.height));
+        }
+        return layer.getContext('2d', { willReadFrequently: true });
+    }
+
+    let _minifyTimer = null;
+    let _lastCam = { x: null, y: null, scale: null, w: null, h: null };
+    function startMinifyLoop() {
+        if (_minifyTimer) return;
+        _minifyTimer = setInterval(renderMinifyOnce, 200);
+    }
+    function stopMinifyLoop() {
+        if (_minifyTimer) { clearInterval(_minifyTimer); _minifyTimer = null; }
+        const layer = document.getElementById('elaubros-minify-layer');
+        if (layer) layer.remove();
+    }
+
+    function renderMinifyOnce() {
+        if (settings.renderMode !== 'minify') return;
+        const canvas = findWplaceCanvas();
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        const cam = getCamera();
+        if (!cam || cam.x == null || cam.y == null) return;
+
+        // Nur neu zeichnen, wenn sich Kamera/Rect geändert haben
+        if (_lastCam.x === cam.x && _lastCam.y === cam.y && _lastCam.scale === cam.scale && _lastCam.w === rect.width && _lastCam.h === rect.height) return;
+        _lastCam = { x: cam.x, y: cam.y, scale: cam.scale, w: rect.width, h: rect.height };
+
+        const ctx = ensureMinifyLayer(rect);
+        ctx.clearRect(0,0,ctx.canvas.width, ctx.canvas.height);
+        ctx.imageSmoothingEnabled = false;
+
+        const scale = Number(cam.scale) || 1;
+        const centerOffsetX = rect.width / 2;
+        const centerOffsetY = rect.height / 2;
+        // Größe des kleinen Quadrats (als Anteil des Zooms)
+        const box = Math.max(1, Math.floor(scale * 0.5));
+        const half = Math.floor(box / 2);
+
+        for (const ov of Object.values(overlays)) {
+            if (!ov.enabled || !ov.img || ov.img.naturalWidth === 0) continue;
+            const src = (settings.paletteMatch && ov.processedCanvas) ? ov.processedCanvas : (() => {
+                const c=document.createElement('canvas'); c.width=ov.img.naturalWidth; c.height=ov.img.naturalHeight; const cx=c.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=false; cx.drawImage(ov.img,0,0); return c; })();
+            const sctx = src.getContext('2d', { willReadFrequently: true });
+            const imgd = sctx.getImageData(0, 0, src.width, src.height);
+            const data = imgd.data; const w = imgd.width; const h = imgd.height;
+            for (let y=0; y<h; y++) {
+                const wy = ov.worldY + y;
+                for (let x=0; x<w; x++) {
+                    const i = (y*w + x) * 4;
+                    const a = data[i+3]; if (a === 0) continue;
+                    const r=data[i], g=data[i+1], b=data[i+2];
+                    const wx = ov.worldX + x;
+                    const sx = (wx - cam.x) * scale + centerOffsetX;
+                    const sy = (wy - cam.y) * scale + centerOffsetY;
+                    if (sx < 0 || sy < 0 || sx >= rect.width || sy >= rect.height) continue;
+                    ctx.globalAlpha = (a/255) * Number(ov.opacity ?? 0.5);
+                    ctx.fillStyle = `rgb(${r},${g},${b})`;
+                    ctx.fillRect(Math.round(sx - half), Math.round(sy - half), box, box);
+                }
+            }
+            ctx.globalAlpha = 1;
+        }
     }
 
     // Positionierung wie Overlay Pro: Weltkoordinaten → Bildschirmkoordinaten (DOM-Overlay; derzeit nur Debug)
@@ -446,7 +528,10 @@
         // Neu quantisieren, falls gewünscht
         Object.values(overlays).forEach(o => { if (o.img && o.img.naturalWidth) o.processedCanvas = quantizeToPalette(o.img, settings.alphaHarden); });
     });
-    modeSel.addEventListener('change', () => { settings.renderMode = modeSel.value; });
+    modeSel.addEventListener('change', () => { 
+        settings.renderMode = modeSel.value; 
+        if (settings.renderMode === 'minify') startMinifyLoop(); else stopMinifyLoop();
+    });
 
     // JSON laden
     GM_xmlhttpRequest({
@@ -545,8 +630,10 @@
                     menu.appendChild(wrapper);
                 });
 
-                // Installiere Tile-Hook
+                // Installiere Tile-Hook (für Normalmodus)
                 installTileHook();
+                // Falls Minify aktiv ist, DOM-Layer-Loop starten
+                if (settings.renderMode === 'minify') startMinifyLoop();
 
             } catch(e) {
                 console.error("Fehler beim Parsen der Overlay JSON:", e);
