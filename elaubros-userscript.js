@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.7
+// @version      1.8
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -15,6 +15,7 @@
     'use strict';
 
     const CONFIG_URL = "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/overlays.json";
+    const TILE_SIZE = 1000; // wie Overlay Pro
     const overlays = {}; // für Menüsteuerung und Repositionierung
 
     // Hilfsfunktion: Canvas finden
@@ -112,22 +113,20 @@
         const screenX = (overlayX - camera.x) * scale + centerOffsetX;
         const screenY = (overlayY - camera.y) * scale + centerOffsetY;
 
-        // Overlay-Layer erzeugen (nur einmal, als Geschwister vom Canvas)
+        // Overlay-Layer erzeugen (global, fixiert im Viewport)
         let overlayLayer = document.getElementById("elaubros-overlay-layer");
         if (!overlayLayer) {
             overlayLayer = document.createElement("div");
             overlayLayer.id = "elaubros-overlay-layer";
-            overlayLayer.style.position = "absolute";
+            overlayLayer.style.position = "fixed";
             overlayLayer.style.pointerEvents = "none";
             overlayLayer.style.zIndex = 9999;
-            canvas.parentElement.insertBefore(overlayLayer, canvas.nextSibling);
+            document.body.appendChild(overlayLayer);
         }
 
         // Overlay-Layer exakt über das Canvas im Viewport platzieren (in Seitenkoordinaten)
-        const docLeft = window.scrollX + rect.left;
-        const docTop = window.scrollY + rect.top;
-        overlayLayer.style.left = docLeft + "px";
-        overlayLayer.style.top = docTop + "px";
+        overlayLayer.style.left = rect.left + "px";
+        overlayLayer.style.top = rect.top + "px";
         overlayLayer.style.width = rect.width + "px";
         overlayLayer.style.height = rect.height + "px";
         // WICHTIG: keine CSS-Transformation übernehmen – wir rechnen die Kamera selbst ein
@@ -209,11 +208,17 @@
                 if (!config.overlays) return;
 
                 config.overlays.forEach((overlay, index) => {
-                    // Pixel-Koordinaten aus pixelUrl extrahieren
-                    const match = overlay.pixelUrl.match(/x=(\d+)&y=(\d+)/);
-                    if (!match) return;
-                    const pixelX = parseInt(match[1]);
-                    const pixelY = parseInt(match[2]);
+                    // Vollständige Koordinaten (Chunk + Position) aus pixelUrl extrahieren
+                    // Beispiel: https://backend.wplace.live/s0/pixel/1088/678?x=254&y=673
+                    const full = overlay.pixelUrl || "";
+                    const m = full.match(/\/pixel\/(\d+)\/(\d+)\?x=(\d+)&y=(\d+)/);
+                    if (!m) return;
+                    const chunk1 = parseInt(m[1], 10);
+                    const chunk2 = parseInt(m[2], 10);
+                    const posX = parseInt(m[3], 10);
+                    const posY = parseInt(m[4], 10);
+                    const pixelX = chunk1 * TILE_SIZE + posX;
+                    const pixelY = chunk2 * TILE_SIZE + posY;
 
                     // Overlay-Bild erstellen
                     const img = new Image();
@@ -222,8 +227,8 @@
                     img.style.display = "none"; // startet unsichtbar
 
                     // Koordinaten für spätere Repositionierung speichern
-                    img.dataset.pixelX = pixelX;
-                    img.dataset.pixelY = pixelY;
+                    img.dataset.pixelX = String(pixelX);
+                    img.dataset.pixelY = String(pixelY);
                     img.dataset.offsetX = overlay.offsetX || 0;
                     img.dataset.offsetY = overlay.offsetY || 0;
 
