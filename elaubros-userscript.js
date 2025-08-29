@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.12
+// @version      1.13
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -16,7 +16,7 @@
 
     const CONFIG_URL = "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/overlays.json";
     const TILE_SIZE = 1000; // wie Overlay Pro
-    const overlays = {}; // für Menüsteuerung und Repositionierung
+    const overlays = {}; // { name: { img, worldX, worldY, offsetX, offsetY, opacity, enabled } }
 
     // Hilfsfunktion: Canvas finden
     function findWplaceCanvas() {
@@ -88,7 +88,7 @@
         return null;
     }
 
-    // Positionierung wie Overlay Pro: Weltkoordinaten → Bildschirmkoordinaten
+    // Positionierung wie Overlay Pro: Weltkoordinaten → Bildschirmkoordinaten (DOM-Overlay; derzeit nur Debug)
     function positionOverlayLikeOverlayPro(img) {
         const overlayX = parseInt(img.dataset.pixelX) + (parseInt(img.dataset.offsetX) || 0);
         const overlayY = parseInt(img.dataset.pixelY) + (parseInt(img.dataset.offsetY) || 0);
@@ -196,6 +196,79 @@
         img.style.transformOrigin = "top left";
     }
 
+    // Tile-Hook wie Overlay Pro: fängt Tile-Requests ab und zeichnet Overlays hinein
+    function installTileHook() {
+        if (window._elaubros_hook_installed) return;
+        window._elaubros_hook_installed = true;
+
+        const TILE_SIZE = 1000;
+        const origFetch = window.fetch.bind(window);
+
+        function matchTileUrl(urlStr) {
+            try {
+                const u = new URL(urlStr, location.href);
+                if (u.hostname !== "backend.wplace.live" || !u.pathname.startsWith("/files/")) return null;
+                const m = u.pathname.match(/\/(\d+)\/(\d+)\.png$/i);
+                if (!m) return null;
+                return { chunk1: parseInt(m[1], 10), chunk2: parseInt(m[2], 10) };
+            } catch { return null; }
+        }
+
+        async function composeTile(originalBlob, chunk1, chunk2) {
+            // Sammle aktive Overlays
+            const active = Object.values(overlays).filter(o => o.enabled && o.img && o.img.naturalWidth > 0);
+            if (active.length === 0) return originalBlob;
+
+            try {
+                const tileImg = await createImageBitmap(originalBlob);
+                const canvas = document.createElement('canvas');
+                canvas.width = TILE_SIZE;
+                canvas.height = TILE_SIZE;
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                ctx.imageSmoothingEnabled = false;
+                // Zeichne Originaltile
+                ctx.drawImage(tileImg, 0, 0, TILE_SIZE, TILE_SIZE);
+
+                const tileOriginX = chunk1 * TILE_SIZE;
+                const tileOriginY = chunk2 * TILE_SIZE;
+
+                for (const ov of active) {
+                    const drawX = (ov.worldX + (ov.offsetX||0)) - tileOriginX;
+                    const drawY = (ov.worldY + (ov.offsetY||0)) - tileOriginY;
+                    if ((drawX + ov.img.naturalWidth) <= 0 || (drawY + ov.img.naturalHeight) <= 0 || drawX >= TILE_SIZE || drawY >= TILE_SIZE) {
+                        continue; // komplett außerhalb dieses Tiles
+                    }
+                    ctx.globalAlpha = Number(ov.opacity ?? 0.5);
+                    ctx.drawImage(ov.img, Math.round(drawX), Math.round(drawY));
+                }
+
+                return await new Promise((resolve, reject) => {
+                    canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/png');
+                });
+            } catch (e) {
+                console.warn('ELAUBros composeTile failed', e);
+                return originalBlob;
+            }
+        }
+
+        window.fetch = async function(input, init) {
+            const url = typeof input === 'string' ? input : input?.url || '';
+            const match = matchTileUrl(url);
+            if (!match) return origFetch(input, init);
+            const res = await origFetch(input, init);
+            try {
+                const ct = res.headers.get('content-type') || '';
+                if (!ct.includes('image')) return res;
+                const blob = await res.clone().blob();
+                const finalBlob = await composeTile(blob, match.chunk1, match.chunk2);
+                return new Response(finalBlob, { status: res.status, statusText: res.statusText, headers: { 'Content-Type': 'image/png' } });
+            } catch (e) {
+                console.warn('ELAUBros fetch hook error', e);
+                return res;
+            }
+        };
+    }
+
     // Menü erstellen
     const menu = document.createElement("div");
     menu.id = "elaubros-menu";
@@ -286,17 +359,27 @@
                     img.dataset.offsetX = overlay.offsetX || 0;
                     img.dataset.offsetY = overlay.offsetY || 0;
 
-                    overlays[overlay.name || `Overlay ${index+1}`] = img;
+                    const name = overlay.name || `Overlay ${index+1}`;
+                    overlays[name] = {
+                        name,
+                        img,
+                        worldX: pixelX,
+                        worldY: pixelY,
+                        offsetX: overlay.offsetX || 0,
+                        offsetY: overlay.offsetY || 0,
+                        opacity: overlay.opacity ?? 0.5,
+                        enabled: false
+                    };
 
                     // Menü-Eintrag
                     const wrapper = document.createElement("div");
 
                     const checkbox = document.createElement("input");
                     checkbox.type = "checkbox";
-                    checkbox.dataset.overlay = overlay.name;
+                    checkbox.dataset.overlay = name;
 
                     const labelText = document.createElement("span");
-                    labelText.textContent = overlay.name;
+                    labelText.textContent = name;
 
                     const label = document.createElement("label");
                     label.appendChild(checkbox);
@@ -307,21 +390,18 @@
                     slider.min = "0";
                     slider.max = "1";
                     slider.step = "0.05";
-                    slider.value = img.style.opacity;
+                    slider.value = String(overlays[name].opacity);
 
-                    // Checkbox: Sichtbarkeit
+                    // Checkbox: Aktivieren/Deaktivieren (wir rendern in Tiles)
                     checkbox.addEventListener("change", function(e) {
                         const name = e.target.dataset.overlay;
-                        const img = overlays[name];
-                        img.style.display = e.target.checked ? "block" : "none";
-                        if (e.target.checked) {
-                            positionOverlayLikeOverlayPro(img);
-                        }
+                        const ov = overlays[name];
+                        ov.enabled = !!e.target.checked;
                     });
 
-                    // Slider: Transparenz
+                    // Slider: Transparenz (wir nutzen für Tile-Compositing)
                     slider.addEventListener("input", function(e) {
-                        img.style.opacity = e.target.value;
+                        overlays[name].opacity = Number(e.target.value);
                     });
 
                     wrapper.appendChild(label);
@@ -329,22 +409,8 @@
                     menu.appendChild(wrapper);
                 });
 
-                // Repositioniere Overlays regelmäßig (z.B. alle 200ms)
-                setInterval(() => {
-                    Object.values(overlays).forEach(img => {
-                        if (img.style.display !== "none") {
-                            positionOverlayLikeOverlayPro(img);
-                        }
-                    });
-                }, 200);
-
-                window.addEventListener("resize", () => {
-                    Object.values(overlays).forEach(img => {
-                        if (img.style.display !== "none") {
-                            positionOverlayLikeOverlayPro(img);
-                        }
-                    });
-                });
+                // Installiere Tile-Hook
+                installTileHook();
 
             } catch(e) {
                 console.error("Fehler beim Parsen der Overlay JSON:", e);
