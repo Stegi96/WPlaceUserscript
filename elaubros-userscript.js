@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.23
+// @version      1.24
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -369,8 +369,6 @@
             // Sammle aktive Overlays
             const active = Object.values(overlays).filter(o => o.enabled && o.img && o.img.naturalWidth > 0);
             if (active.length === 0) return originalBlob;
-            // In Minify-Modus zeichnen wir NICHT in die Tiles, sondern im DOM-Layer
-            if (settings.renderMode !== 'normal') return originalBlob;
 
             try {
                 const tileImg = await createImageBitmap(originalBlob);
@@ -385,7 +383,7 @@
                 // Für Minify: vorbereiteter hochskalierter Canvas
                 let minCanvas = null, mctx = null, SS = 3, Center = 1;
                 if (settings.renderMode === 'minify') {
-                    SS = 3; Center = Math.floor(SS/2);
+                    SS = 5; Center = Math.floor(SS/2);
                     minCanvas = document.createElement('canvas');
                     minCanvas.width = TILE_SIZE * SS;
                     minCanvas.height = TILE_SIZE * SS;
@@ -404,12 +402,48 @@
                         continue; // komplett außerhalb dieses Tiles
                     }
                     const opacity = Number(ov.opacity ?? 0.5);
-                    {
+                    if (settings.renderMode === 'minify' && mctx) {
+                        // Symbols: kleines Kreuz im Zentrum jedes Overlay-Pixels (Super-Sampling -> Downscale)
+                        const srcCanvas = (settings.paletteMatch && ov.processedCanvas) ? ov.processedCanvas : (() => {
+                            const c=document.createElement('canvas'); c.width=ov.img.naturalWidth; c.height=ov.img.naturalHeight; const cx=c.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=false; cx.drawImage(ov.img,0,0); return c; })();
+                        const sw = srcCanvas.width, sh = srcCanvas.height;
+                        const sx0 = Math.max(0, -drawX), sy0 = Math.max(0, -drawY);
+                        const sx1 = Math.min(sw, TILE_SIZE - drawX), sy1 = Math.min(sh, TILE_SIZE - drawY);
+                        if (sx1>sx0 && sy1>sy0) {
+                            const sctx = srcCanvas.getContext('2d', { willReadFrequently: true });
+                            const imgd = sctx.getImageData(sx0, sy0, sx1 - sx0, sy1 - sy0);
+                            const data = imgd.data; const w = imgd.width;
+                            for (let y=0; y<imgd.height; y++) {
+                                const baseY = (drawY + sy0 + y) * SS + Center;
+                                for (let x=0; x<imgd.width; x++) {
+                                    const i = (y*w + x) * 4;
+                                    const a = data[i+3]; if (a === 0) continue;
+                                    const r=data[i], g=data[i+1], b=data[i+2];
+                                    mctx.globalAlpha = (a/255) * opacity;
+                                    mctx.fillStyle = `rgb(${r},${g},${b})`;
+                                    const baseX = (drawX + sx0 + x) * SS + Center;
+                                    // Kreuzsymbol (3x3) im Zentrum
+                                    mctx.fillRect(baseX-1, baseY, 3, 1); // horizontal
+                                    mctx.fillRect(baseX, baseY-1, 1, 3); // vertikal
+                                }
+                            }
+                            mctx.globalAlpha = 1;
+                        }
+                    } else {
+                        // Normalmodus: komplettes Bild einzeichnen
                         ctx.globalAlpha = opacity;
                         const src = (settings.paletteMatch && ov.processedCanvas) ? ov.processedCanvas : ov.img;
                         ctx.drawImage(src, Math.round(drawX), Math.round(drawY));
                         ctx.globalAlpha = 1;
                     }
+                }
+
+                // Bei Minify: Downscale auf finalen Tile-Canvas (enthält bereits Originaltile)
+                if (settings.renderMode === 'minify' && minCanvas) {
+                    ctx.imageSmoothingEnabled = false;
+                    // Ersetze den Canvas-Inhalt mit der minifizierten Version (inkl. Tile-Hintergrund)
+                    ctx.clearRect(0,0,TILE_SIZE,TILE_SIZE);
+                    ctx.drawImage(minCanvas, 0, 0, TILE_SIZE, TILE_SIZE);
                 }
 
                 return await new Promise((resolve, reject) => {
@@ -530,7 +564,8 @@
     });
     modeSel.addEventListener('change', () => { 
         settings.renderMode = modeSel.value; 
-        if (settings.renderMode === 'minify') startMinifyLoop(); else stopMinifyLoop();
+        // Tile-basierter Minify; DOM-Layer nicht nutzen
+        stopMinifyLoop();
     });
 
     // JSON laden
@@ -630,10 +665,10 @@
                     menu.appendChild(wrapper);
                 });
 
-                // Installiere Tile-Hook (für Normalmodus)
+                // Installiere Tile-Hook (Normal + Minify)
                 installTileHook();
-                // Falls Minify aktiv ist, DOM-Layer-Loop starten
-                if (settings.renderMode === 'minify') startMinifyLoop();
+                // Kein DOM-Layer für Minify
+                stopMinifyLoop();
 
             } catch(e) {
                 console.error("Fehler beim Parsen der Overlay JSON:", e);
