@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.8
+// @version      1.9
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -42,7 +42,7 @@
             overlayLayer.id = "elaubros-overlay-layer";
             overlayLayer.style.position = "absolute";
             overlayLayer.style.pointerEvents = "none";
-            overlayLayer.style.zIndex = 9999;
+            overlayLayer.style.zIndex = 999999;
             // Direkt nach dem Canvas einfügen
             canvas.parentElement.insertBefore(overlayLayer, canvas.nextSibling);
         }
@@ -106,12 +106,26 @@
         // Viewport-Rechteck des Canvas (CSS-Pixel)
         const rect = canvas.getBoundingClientRect();
 
-        // Berechne Bildschirmposition in CSS-Pixeln; Kamera ist meist auf das Zentrum bezogen
-        const scale = camera.scale || 1;
+        // Berechne Bildschirmposition in CSS-Pixeln; Kamera-Ursprung kann center oder top-left sein.
+        let scale = camera.scale || 1;
+        let camX = camera.x;
+        let camY = camera.y;
+        // Heuristik: Kamera-Koordinaten ggf. von Chunk- in Weltpixel umrechnen
+        if (Math.abs(overlayX) > TILE_SIZE * 10 && Math.abs(camX) < TILE_SIZE * 10) {
+            camX *= TILE_SIZE;
+            camY *= TILE_SIZE;
+        }
         const centerOffsetX = rect.width / 2;
         const centerOffsetY = rect.height / 2;
-        const screenX = (overlayX - camera.x) * scale + centerOffsetX;
-        const screenY = (overlayY - camera.y) * scale + centerOffsetY;
+        const sxCenter = (overlayX - camX) * scale + centerOffsetX;
+        const syCenter = (overlayY - camY) * scale + centerOffsetY;
+        const sxTL = (overlayX - camX) * scale;
+        const syTL = (overlayY - camY) * scale;
+        // Wähle die Variante, die im sichtbaren Canvas liegt, falls möglich
+        const inRectCenter = sxCenter >= 0 && syCenter >= 0 && sxCenter <= rect.width && syCenter <= rect.height;
+        const inRectTL = sxTL >= 0 && syTL >= 0 && sxTL <= rect.width && syTL <= rect.height;
+        const screenX = inRectCenter || !inRectTL ? sxCenter : sxTL;
+        const screenY = inRectCenter || !inRectTL ? syCenter : syTL;
 
         // Overlay-Layer erzeugen (global, fixiert im Viewport)
         let overlayLayer = document.getElementById("elaubros-overlay-layer");
@@ -143,6 +157,20 @@
         }
 
         // Overlay-Bild exakt auf die berechnete Position legen
+        if (!img.dataset._elaubros_logged) {
+            try {
+                console.log("ELAUBros overlay", {
+                    name: img.alt || "",
+                    overlayX, overlayY, scale,
+                    camera: { x: camera.x, y: camera.y, scale: camera.scale },
+                    usedCam: { x: camX, y: camY, scale },
+                    rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+                    screen: { x: screenX, y: screenY },
+                    used: (inRectCenter || !inRectTL) ? "center" : "top-left"
+                });
+            } catch(e) {}
+            img.dataset._elaubros_logged = "1";
+        }
         img.style.left = `${Math.round(screenX)}px`;
         img.style.top = `${Math.round(screenY)}px`;
         img.style.transform = `scale(${scale})`;
