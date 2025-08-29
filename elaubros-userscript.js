@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.5
+// @version      1.6
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -91,7 +91,7 @@
         const camera = getCamera();
         if (!camera) return;
 
-        // Berechne Bildschirmposition
+        // Berechne Bildschirmposition in CSS-Pixeln (ohne CSS-Transform übernehmen)
         const scale = camera.scale || 1;
         const screenX = (overlayX - camera.x) * scale;
         const screenY = (overlayY - camera.y) * scale;
@@ -108,17 +108,20 @@
             overlayLayer.style.position = "absolute";
             overlayLayer.style.pointerEvents = "none";
             overlayLayer.style.zIndex = 9999;
-            canvas.parentElement.appendChild(overlayLayer);
+            canvas.parentElement.insertBefore(overlayLayer, canvas.nextSibling);
         }
 
-        // Overlay-Layer exakt über das Canvas legen
+        // Overlay-Layer exakt über das Canvas im Viewport platzieren (in Seitenkoordinaten)
         const rect = canvas.getBoundingClientRect();
-        overlayLayer.style.left = canvas.offsetLeft + "px";
-        overlayLayer.style.top = canvas.offsetTop + "px";
-        overlayLayer.style.width = canvas.width + "px";
-        overlayLayer.style.height = canvas.height + "px";
-        overlayLayer.style.transform = canvas.style.transform;
-        overlayLayer.style.transformOrigin = canvas.style.transformOrigin;
+        const docLeft = window.scrollX + rect.left;
+        const docTop = window.scrollY + rect.top;
+        overlayLayer.style.left = docLeft + "px";
+        overlayLayer.style.top = docTop + "px";
+        overlayLayer.style.width = rect.width + "px";
+        overlayLayer.style.height = rect.height + "px";
+        // WICHTIG: keine CSS-Transformation übernehmen – wir rechnen die Kamera selbst ein
+        overlayLayer.style.transform = "none";
+        overlayLayer.style.transformOrigin = "top left";
 
         // Overlay-Bild einfügen (nur einmal)
         if (img.parentElement !== overlayLayer) {
@@ -126,6 +129,7 @@
             img.style.position = "absolute";
             img.style.pointerEvents = "none";
             img.style.zIndex = 1;
+            img.style.imageRendering = "pixelated";
         }
 
         // Overlay-Bild exakt auf die berechnete Position legen
