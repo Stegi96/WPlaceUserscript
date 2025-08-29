@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.14
+// @version      1.15
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -16,7 +16,39 @@
 
     const CONFIG_URL = "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/overlays.json";
     const TILE_SIZE = 1000; // wie Overlay Pro
-    const overlays = {}; // { name: { img, worldX, worldY, offsetX, offsetY, opacity, enabled } }
+    const overlays = {}; // { name: { img, worldX, worldY, offsetX, offsetY, opacity, enabled, processedCanvas } }
+    const settings = { paletteMatch: true, alphaHarden: true, renderMode: 'normal', minifyScale: 3 };
+
+    // Wplace-Palette (Free)
+    const WPLACE_FREE = [
+        [0,0,0],[60,60,60],[120,120,120],[210,210,210],[255,255,255],
+        [96,0,24],[237,28,36],[255,127,39],[246,170,9],[249,221,59],[255,250,188],
+        [14,185,104],[19,230,123],[135,255,94],[12,129,110],[16,174,166],[19,225,190],[96,247,242],
+        [40,80,158],[64,147,228],[107,80,246],[153,177,251],
+        [120,12,153],[170,56,185],[224,159,249],
+        [203,0,122],[236,31,128],[243,141,169],
+        [104,70,52],[149,104,42],[248,178,119]
+    ];
+
+    function colorDist2(r1,g1,b1, r2,g2,b2){const dr=r1-r2,dg=g1-g2,db=b1-b2;return dr*dr+dg*dg+db*db;}
+    function nearestPaletteColor(r,g,b){let best=WPLACE_FREE[0],bd=Infinity;for(const c of WPLACE_FREE){const d=colorDist2(r,g,b,c[0],c[1],c[2]);if(d<bd){bd=d;best=c;}}return best;}
+
+    // GM fetch helpers to avoid CORS tainting
+    function gmFetchBlob(url){return new Promise((resolve,reject)=>{try{GM_xmlhttpRequest({method:'GET',url,responseType:'blob',onload:(res)=>{if(res.status>=200&&res.status<300&&res.response)resolve(res.response);else reject(new Error('GM_xhr '+res.status));},onerror:()=>reject(new Error('GM_xhr network error')),ontimeout:()=>reject(new Error('GM_xhr timeout'))});}catch(e){reject(e);}})}
+    function blobToDataURL(blob){return new Promise((resolve,reject)=>{const fr=new FileReader();fr.onload=()=>resolve(String(fr.result));fr.onerror=reject;fr.readAsDataURL(blob);});}
+    async function loadImageDataURL(url){const blob=await gmFetchBlob(url);if(!blob||!String(blob.type).startsWith('image/'))throw new Error('not image');return await blobToDataURL(blob);}    
+
+    function quantizeToPalette(img, alphaHarden=true){
+        try{
+            const c=document.createElement('canvas');
+            c.width=img.naturalWidth||img.width; c.height=img.naturalHeight||img.height;
+            const ctx=c.getContext('2d',{willReadFrequently:true});
+            ctx.imageSmoothingEnabled=false; ctx.drawImage(img,0,0);
+            const id=ctx.getImageData(0,0,c.width,c.height); const d=id.data;
+            for(let i=0;i<d.length;i+=4){let a=d[i+3]; if(alphaHarden){a=d[i+3]=(a>16?255:0);} if(a===0) continue; const n=nearestPaletteColor(d[i],d[i+1],d[i+2]); d[i]=n[0]; d[i+1]=n[1]; d[i+2]=n[2];}
+            ctx.putImageData(id,0,0); return c;
+        }catch(e){console.warn('quantize failed',e); return null;}
+    }
 
     // Hilfsfunktion: Canvas finden
     function findWplaceCanvas() {
@@ -243,8 +275,42 @@
                     if ((drawX + ov.img.naturalWidth) <= 0 || (drawY + ov.img.naturalHeight) <= 0 || drawX >= TILE_SIZE || drawY >= TILE_SIZE) {
                         continue; // komplett außerhalb dieses Tiles
                     }
-                    ctx.globalAlpha = Number(ov.opacity ?? 0.5);
-                    ctx.drawImage(ov.img, Math.round(drawX), Math.round(drawY));
+                    const opacity = Number(ov.opacity ?? 0.5);
+                    if (settings.renderMode === 'minify') {
+                        // Dot grid at pixel centers using minifyScale
+                        const scale = Math.max(2, Math.floor(settings.minifyScale));
+                        const center = Math.floor(scale / 2);
+                        const srcCanvas = (settings.paletteMatch && ov.processedCanvas) ? ov.processedCanvas : (() => {
+                            const c=document.createElement('canvas'); c.width=ov.img.naturalWidth; c.height=ov.img.naturalHeight; const cx=c.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=false; cx.drawImage(ov.img,0,0); return c; })();
+                        const sw = srcCanvas.width, sh = srcCanvas.height;
+                        const sx0 = Math.max(0, -drawX), sy0 = Math.max(0, -drawY);
+                        const sx1 = Math.min(sw, TILE_SIZE - drawX), sy1 = Math.min(sh, TILE_SIZE - drawY);
+                        if (sx1>sx0 && sy1>sy0) {
+                            const sctx = srcCanvas.getContext('2d', { willReadFrequently: true });
+                            const imgd = sctx.getImageData(sx0, sy0, sx1 - sx0, sy1 - sy0);
+                            const data = imgd.data; const w = imgd.width;
+                            for (let y=0; y<imgd.height; y++) {
+                                const ty = drawY + sy0 + y;
+                                if ((ty % scale) !== center) continue;
+                                for (let x=0; x<imgd.width; x++) {
+                                    const tx = drawX + sx0 + x;
+                                    if ((tx % scale) !== center) continue;
+                                    const i = (y*w + x) * 4;
+                                    const a = data[i+3]; if (a === 0) continue;
+                                    const r=data[i], g=data[i+1], b=data[i+2];
+                                    ctx.globalAlpha = (a/255) * opacity;
+                                    ctx.fillStyle = `rgb(${r},${g},${b})`;
+                                    ctx.fillRect(tx, ty, 1, 1);
+                                }
+                            }
+                            ctx.globalAlpha = 1;
+                        }
+                    } else {
+                        ctx.globalAlpha = opacity;
+                        const src = (settings.paletteMatch && ov.processedCanvas) ? ov.processedCanvas : ov.img;
+                        ctx.drawImage(src, Math.round(drawX), Math.round(drawY));
+                        ctx.globalAlpha = 1;
+                    }
                 }
 
                 return await new Promise((resolve, reject) => {
@@ -282,7 +348,16 @@
     // Menü erstellen
     const menu = document.createElement("div");
     menu.id = "elaubros-menu";
-    menu.innerHTML = `<strong>ELAUBros Overlays</strong> <button id="elaubros-toggle">–</button><br>`;
+    menu.innerHTML = `<strong>ELAUBros Overlays</strong> <button id="elaubros-toggle">–</button><br>
+    <label><span>Palette-Match</span> <input type="checkbox" id="elaubros-palette" checked></label>
+    <label><span>Alpha hart</span> <input type="checkbox" id="elaubros-alpha" checked></label>
+    <label><span>Modus</span>
+      <select id="elaubros-mode">
+        <option value="normal" selected>Normal</option>
+        <option value="minify">Minify</option>
+      </select>
+    </label>
+    `;
     document.body.appendChild(menu);
 
     GM_addStyle(`
@@ -319,6 +394,8 @@
             border-radius: 4px;
             cursor: pointer;
         }
+        #elaubros-menu label span { flex: 1; }
+        #elaubros-menu select { width: 100%; }
     `);
 
     // Menü minimieren/maximieren
@@ -327,6 +404,17 @@
         children.forEach(el => el.style.display = (el.style.display === "none" ? "block" : "none"));
         this.textContent = this.textContent === "–" ? "+" : "–";
     });
+
+    // Globale Optionen
+    const palCb = document.getElementById('elaubros-palette');
+    const alphaCb = document.getElementById('elaubros-alpha');
+    const modeSel = document.getElementById('elaubros-mode');
+    palCb.addEventListener('change', () => { settings.paletteMatch = palCb.checked; });
+    alphaCb.addEventListener('change', () => { settings.alphaHarden = alphaCb.checked; 
+        // Neu quantisieren, falls gewünscht
+        Object.values(overlays).forEach(o => { if (o.img && o.img.naturalWidth) o.processedCanvas = quantizeToPalette(o.img, settings.alphaHarden); });
+    });
+    modeSel.addEventListener('change', () => { settings.renderMode = modeSel.value; });
 
     // JSON laden
     GM_xmlhttpRequest({
@@ -350,15 +438,21 @@
                     const pixelX = chunk1 * TILE_SIZE + posX;
                     const pixelY = chunk2 * TILE_SIZE + posY;
 
-                    // Overlay-Bild erstellen
+                    // Overlay-Bild laden (CORS-sicher) und palettieren
                     const img = new Image();
-                    img.crossOrigin = "anonymous";
-                    img.src = overlay.imageUrl;
-                    img.addEventListener('error', () => {
-                        console.error('ELAUBros overlay image failed to load:', overlay.imageUrl);
-                    });
+                    (async () => {
+                        try {
+                            const dataUrl = await loadImageDataURL(overlay.imageUrl);
+                            img.src = dataUrl;
+                        } catch(e) {
+                            console.error('ELAUBros overlay image failed to load:', overlay.imageUrl, e);
+                        }
+                    })();
                     img.addEventListener('load', () => {
                         console.log('ELAUBros overlay image loaded:', overlay.name, img.naturalWidth + 'x' + img.naturalHeight);
+                        const name = overlay.name || `Overlay ${index+1}`;
+                        const qc = quantizeToPalette(img, settings.alphaHarden);
+                        if (overlays[name]) overlays[name].processedCanvas = qc;
                     });
                     img.style.opacity = overlay.opacity ?? 0.5;
                     img.style.display = "none"; // startet unsichtbar
