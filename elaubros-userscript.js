@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.28
+// @version      1.29
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -382,13 +382,15 @@
                 // Zeichne Originaltile
                 ctx.drawImage(tileImg, 0, 0, TILE_SIZE, TILE_SIZE);
 
-                // Für Minify: arbeite direkt im Ziel-ImageData mit symbolischer Mischdeckung
-                const SS = 5; // Super-Sampling Referenzgröße
-                const SYMBOL_CELLS = 5; // Kreuz 3x3 mit Mitte doppelt gezählt -> 5 Zellen wirksam
-                const COVERAGE = SYMBOL_CELLS / (SS * SS); // ~0.2
-                let destImageData = null;
+                // Für Minify: skaliere Overlay hoch und filtere auf Zellzentrum (Dot-Grid wie Overlay Pro)
+                const MIN_SCALE = 5; // Zellgröße
+                let dotCanvas = null, dotCtx = null;
                 if (settings.renderMode === 'minify') {
-                    destImageData = ctx.getImageData(0, 0, TILE_SIZE, TILE_SIZE);
+                    dotCanvas = document.createElement('canvas');
+                    dotCanvas.width = TILE_SIZE * MIN_SCALE;
+                    dotCanvas.height = TILE_SIZE * MIN_SCALE;
+                    dotCtx = dotCanvas.getContext('2d', { willReadFrequently: true });
+                    dotCtx.imageSmoothingEnabled = false;
                 }
 
                 const tileOriginX = chunk1 * TILE_SIZE;
@@ -401,35 +403,35 @@
                         continue; // komplett außerhalb dieses Tiles
                     }
                     const opacity = Number(ov.opacity ?? 0.5);
-                    if (settings.renderMode === 'minify' && destImageData) {
-                        // Symbols: pro Overlay-Pixel mische 20% des Zielpixels mit Overlay-Farbe (Kreuz-Coverage)
+                    if (settings.renderMode === 'minify' && dotCtx) {
+                        // Quelle: quantisierte oder Original-Overlay-Canvas
                         const srcCanvas = (settings.paletteMatch && ov.processedCanvas) ? ov.processedCanvas : (() => {
                             const c=document.createElement('canvas'); c.width=ov.img.naturalWidth; c.height=ov.img.naturalHeight; const cx=c.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=false; cx.drawImage(ov.img,0,0); return c; })();
-                        const sctx = srcCanvas.getContext('2d', { willReadFrequently: true });
                         const sw = srcCanvas.width, sh = srcCanvas.height;
-                        const imgd = sctx.getImageData(0, 0, sw, sh);
-                        const data = imgd.data; const rowW = imgd.width;
-                        const dest = destImageData.data;
+                        // Overlay skaliert in Dot-Canvas zeichnen
+                        const drawXScaled = Math.round(drawX * MIN_SCALE);
+                        const drawYScaled = Math.round(drawY * MIN_SCALE);
+                        const wScaled = sw * MIN_SCALE;
+                        const hScaled = sh * MIN_SCALE;
+                        dotCtx.drawImage(srcCanvas, 0, 0, sw, sh, drawXScaled, drawYScaled, wScaled, hScaled);
+                        // Filter: nur Zellenzentrum behalten
+                        const center = Math.floor(MIN_SCALE / 2);
+                        const imgd = dotCtx.getImageData(0, 0, dotCanvas.width, dotCanvas.height);
+                        const data = imgd.data;
+                        const width = dotCanvas.width;
                         let drawn = 0;
-                        for (let y=0; y<sh; y++) {
-                            const ty = drawY + y;
-                            if (ty < 0 || ty >= TILE_SIZE) continue;
-                            for (let x=0; x<sw; x++) {
-                                const tx = drawX + x;
-                                if (tx < 0 || tx >= TILE_SIZE) continue;
-                                const i = (y*rowW + x) * 4;
-                                const a = data[i+3]; if (a === 0) continue;
-                                const r=data[i], g=data[i+1], b=data[i+2];
-                                const di = (ty * TILE_SIZE + tx) * 4;
-                                // Stärkerer, klar sichtbarer Dot: volle Farbe mit kräftiger Mischung
-                                const alpha = Math.max(0.75, (a / 255) * opacity); // >= 75% sichtbar
-                                dest[di+0] = Math.round(r * alpha + dest[di+0] * (1 - alpha));
-                                dest[di+1] = Math.round(g * alpha + dest[di+1] * (1 - alpha));
-                                dest[di+2] = Math.round(b * alpha + dest[di+2] * (1 - alpha));
-                                dest[di+3] = 255;
+                        for (let i = 0; i < data.length; i += 4) {
+                            const px = (i/4) % width;
+                            const py = Math.floor((i/4) / width);
+                            if ((px % MIN_SCALE === center) && (py % MIN_SCALE === center)) {
+                                // lassen, aber Opazität übernehmen
+                                data[i+3] = Math.round(data[i+3] * opacity);
                                 drawn++;
+                            } else {
+                                data[i+3] = 0;
                             }
                         }
+                        dotCtx.putImageData(imgd, 0, 0);
                         try { console.debug('ELAUBros minify symbols drawn', drawn, 'on chunk', chunk1, chunk2); } catch {}
                     } else {
                         // Normalmodus: komplettes Bild einzeichnen
@@ -439,8 +441,10 @@
                         ctx.globalAlpha = 1;
                     }
                 }
-                if (settings.renderMode === 'minify' && destImageData) {
-                    ctx.putImageData(destImageData, 0, 0);
+                if (settings.renderMode === 'minify' && dotCanvas) {
+                    // Dot-Layer auf die Originaltile blenden (nearest-neighbor)
+                    ctx.imageSmoothingEnabled = false;
+                    ctx.drawImage(dotCanvas, 0, 0, dotCanvas.width, dotCanvas.height, 0, 0, TILE_SIZE, TILE_SIZE);
                 }
 
                 return await new Promise((resolve, reject) => {
