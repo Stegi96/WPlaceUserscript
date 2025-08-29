@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.22
+// @version      1.23
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -171,7 +171,8 @@
         ctx.clearRect(0,0,ctx.canvas.width, ctx.canvas.height);
         ctx.imageSmoothingEnabled = false;
 
-        const scale = Number(cam.scale) || 1;
+        let scale = Number(cam.scale) || 1;
+        let camX = Number(cam.x), camY = Number(cam.y);
         const centerOffsetX = rect.width / 2;
         const centerOffsetY = rect.height / 2;
         // Effektive CSS-Skalierung aus transform in Vorfahrenkette ermitteln
@@ -215,8 +216,10 @@
                     const a = data[i+3]; if (a === 0) continue;
                     const r=data[i], g=data[i+1], b=data[i+2];
                     const wx = ov.worldX + x;
-                    const sx = (wx - cam.x) * scale + centerOffsetX;
-                    const sy = (wy - cam.y) * scale + centerOffsetY;
+                    // Heuristik: Wenn Kamera in "Chunks" ist, in Weltpixel umrechnen
+                    if (Math.abs(wx) > TILE_SIZE*10 && Math.abs(camX) < TILE_SIZE*10) { camX *= TILE_SIZE; camY *= TILE_SIZE; }
+                    const sx = (wx - camX) * scale + centerOffsetX;
+                    const sy = (wy - camY) * scale + centerOffsetY;
                     if (sx < 0 || sy < 0 || sx >= rect.width || sy >= rect.height) continue;
                     ctx.globalAlpha = (a/255) * Number(ov.opacity ?? 0.5);
                     ctx.fillStyle = `rgb(${r},${g},${b})`;
