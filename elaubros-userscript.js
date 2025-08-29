@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.11
+// @version      1.12
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -100,6 +100,32 @@
         // Viewport-Rechteck des Canvas (CSS-Pixel)
         const rect = canvas.getBoundingClientRect();
 
+        // Kamera lesen; wenn nicht verfügbar, fallback
+        const camera = getCamera();
+        if (!camera || camera.x == null || camera.y == null) {
+            return positionOverlayOnCanvas(img);
+        }
+        let scale = Number(camera.scale) || 1;
+        let camX = Number(camera.x);
+        let camY = Number(camera.y);
+        // Heuristik: Falls Kamera in Chunks statt Pixeln ist
+        if (Math.abs(overlayX) > TILE_SIZE * 10 && Math.abs(camX) < TILE_SIZE * 10) {
+            camX *= TILE_SIZE;
+            camY *= TILE_SIZE;
+        }
+        const centerOffsetX = rect.width / 2;
+        const centerOffsetY = rect.height / 2;
+        const sxCenter = (overlayX - camX) * scale + centerOffsetX;
+        const syCenter = (overlayY - camY) * scale + centerOffsetY;
+        const sxTL = (overlayX - camX) * scale;
+        const syTL = (overlayY - camY) * scale;
+        const cx = rect.width / 2, cy = rect.height / 2;
+        const dCenter = Math.hypot(sxCenter - cx, syCenter - cy);
+        const dTL = Math.hypot(sxTL - cx, syTL - cy);
+        const useCenter = dCenter <= dTL;
+        const screenX = useCenter ? sxCenter : sxTL;
+        const screenY = useCenter ? syCenter : syTL;
+
         // Overlay-Layer erzeugen (als Geschwister des Canvas)
         let overlayLayer = document.getElementById("elaubros-overlay-layer");
         if (!overlayLayer) {
@@ -117,15 +143,9 @@
         overlayLayer.style.width = rect.width + "px";
         overlayLayer.style.height = rect.height + "px";
         // Transform des Canvas bzw. seines nächsten transformierten Vorfahren übernehmen
-        let transformedEl = canvas;
-        for (let i = 0; i < 5 && transformedEl; i++) {
-            const t = window.getComputedStyle(transformedEl).transform;
-            if (t && t !== 'none') break;
-            transformedEl = transformedEl.parentElement;
-        }
-        const cs = window.getComputedStyle(transformedEl || canvas);
-        overlayLayer.style.transform = cs.transform;
-        overlayLayer.style.transformOrigin = cs.transformOrigin || "top left";
+        // Keine Transform übernehmen – wir rechnen screenX/screenY selbst
+        overlayLayer.style.transform = "none";
+        overlayLayer.style.transformOrigin = "top left";
 
         // Overlay-Bild einfügen (nur einmal)
         if (img.parentElement !== overlayLayer) {
@@ -142,8 +162,10 @@
                 console.log("ELAUBros overlay", {
                     name: img.alt || "",
                     overlayX, overlayY,
+                    camera: { x: camX, y: camY, scale },
                     rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
-                    note: 'layer follows canvas CSS transform'
+                    screen: { x: Math.round(screenX), y: Math.round(screenY) },
+                    mode: useCenter ? 'center' : 'top-left'
                 });
             } catch(e) {}
             img.dataset._elaubros_logged = "1";
@@ -154,8 +176,8 @@
             dot.style.position = "absolute";
             dot.style.width = "8px";
             dot.style.height = "8px";
-            dot.style.left = `${overlayX - 4}px`;
-            dot.style.top = `${overlayY - 4}px`;
+            dot.style.left = `${Math.round(screenX) - 4}px`;
+            dot.style.top = `${Math.round(screenY) - 4}px`;
             dot.style.background = "#ff3366";
             dot.style.border = "2px solid white";
             dot.style.borderRadius = "50%";
@@ -168,9 +190,9 @@
             }
             img.dataset._elaubros_pinged = "1";
         }
-        img.style.left = `${overlayX}px`;
-        img.style.top = `${overlayY}px`;
-        img.style.transform = "";
+        img.style.left = `${Math.round(screenX)}px`;
+        img.style.top = `${Math.round(screenY)}px`;
+        img.style.transform = `scale(${scale})`;
         img.style.transformOrigin = "top left";
     }
 
