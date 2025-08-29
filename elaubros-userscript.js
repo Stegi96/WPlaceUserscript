@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.9
+// @version      1.10
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -121,11 +121,13 @@
         const syCenter = (overlayY - camY) * scale + centerOffsetY;
         const sxTL = (overlayX - camX) * scale;
         const syTL = (overlayY - camY) * scale;
-        // Wähle die Variante, die im sichtbaren Canvas liegt, falls möglich
-        const inRectCenter = sxCenter >= 0 && syCenter >= 0 && sxCenter <= rect.width && syCenter <= rect.height;
-        const inRectTL = sxTL >= 0 && syTL >= 0 && sxTL <= rect.width && syTL <= rect.height;
-        const screenX = inRectCenter || !inRectTL ? sxCenter : sxTL;
-        const screenY = inRectCenter || !inRectTL ? syCenter : syTL;
+        // Wähle die Variante, die dem Viewport-Zentrum am nächsten liegt (robust)
+        const cx = rect.width / 2, cy = rect.height / 2;
+        const dCenter = Math.hypot(sxCenter - cx, syCenter - cy);
+        const dTL = Math.hypot(sxTL - cx, syTL - cy);
+        const useCenter = dCenter <= dTL;
+        const screenX = useCenter ? sxCenter : sxTL;
+        const screenY = useCenter ? syCenter : syTL;
 
         // Overlay-Layer erzeugen (global, fixiert im Viewport)
         let overlayLayer = document.getElementById("elaubros-overlay-layer");
@@ -166,10 +168,30 @@
                     usedCam: { x: camX, y: camY, scale },
                     rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
                     screen: { x: screenX, y: screenY },
-                    used: (inRectCenter || !inRectTL) ? "center" : "top-left"
+                    used: useCenter ? "center" : "top-left"
                 });
             } catch(e) {}
             img.dataset._elaubros_logged = "1";
+        }
+        // Kurzer Ping-Marker, um die Ankerposition sichtbar zu machen
+        if (!img.dataset._elaubros_pinged) {
+            const dot = document.createElement("div");
+            dot.style.position = "absolute";
+            dot.style.width = "8px";
+            dot.style.height = "8px";
+            dot.style.left = `${Math.round(screenX) - 4}px`;
+            dot.style.top = `${Math.round(screenY) - 4}px`;
+            dot.style.background = "#ff3366";
+            dot.style.border = "2px solid white";
+            dot.style.borderRadius = "50%";
+            dot.style.boxShadow = "0 0 6px rgba(0,0,0,0.6)";
+            dot.style.pointerEvents = "none";
+            const layer = document.getElementById("elaubros-overlay-layer");
+            if (layer) {
+                layer.appendChild(dot);
+                setTimeout(() => dot.remove(), 1200);
+            }
+            img.dataset._elaubros_pinged = "1";
         }
         img.style.left = `${Math.round(screenX)}px`;
         img.style.top = `${Math.round(screenY)}px`;
@@ -250,7 +272,14 @@
 
                     // Overlay-Bild erstellen
                     const img = new Image();
+                    img.crossOrigin = "anonymous";
                     img.src = overlay.imageUrl;
+                    img.addEventListener('error', () => {
+                        console.error('ELAUBros overlay image failed to load:', overlay.imageUrl);
+                    });
+                    img.addEventListener('load', () => {
+                        console.log('ELAUBros overlay image loaded:', overlay.name, img.naturalWidth + 'x' + img.naturalHeight);
+                    });
                     img.style.opacity = overlay.opacity ?? 0.5;
                     img.style.display = "none"; // startet unsichtbar
 
