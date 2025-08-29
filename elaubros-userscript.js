@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.21
+// @version      1.22
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -197,9 +197,9 @@
         const cssPerCanvasPx = (canvas.width > 0) ? (rect.width / canvas.width) : 1;
         // Beste Schätzung pro Weltpixel in CSS-Pixeln
         const cssPerWorldPx = Math.max(cssScaleFromTransform, cssPerCanvasPx, scale);
-        // Kastenbreite als Anteil des sichtbaren Weltpixels (z.B. 60%)
-        const box = Math.max(1, Math.round(cssPerWorldPx * 0.5));
-        const half = Math.floor(box / 2);
+        // Kreuz-Arme: etwa 50% der sichtbaren Pixelbreite, Linienbreite 1 px
+        const arm = Math.max(1, Math.round(cssPerWorldPx * 0.5 / 2)); // halbe Armlänge
+        const thick = 1;
 
         for (const ov of Object.values(overlays)) {
             if (!ov.enabled || !ov.img || ov.img.naturalWidth === 0) continue;
@@ -220,7 +220,11 @@
                     if (sx < 0 || sy < 0 || sx >= rect.width || sy >= rect.height) continue;
                     ctx.globalAlpha = (a/255) * Number(ov.opacity ?? 0.5);
                     ctx.fillStyle = `rgb(${r},${g},${b})`;
-                    ctx.fillRect(Math.round(sx - half), Math.round(sy - half), box, box);
+                    const cx = Math.round(sx), cy = Math.round(sy);
+                    // Horizontaler Arm
+                    ctx.fillRect(cx - arm, cy, arm*2 + 1, thick);
+                    // Vertikaler Arm
+                    ctx.fillRect(cx, cy - arm, thick, arm*2 + 1);
                 }
             }
             ctx.globalAlpha = 1;
@@ -362,6 +366,8 @@
             // Sammle aktive Overlays
             const active = Object.values(overlays).filter(o => o.enabled && o.img && o.img.naturalWidth > 0);
             if (active.length === 0) return originalBlob;
+            // In Minify-Modus zeichnen wir NICHT in die Tiles, sondern im DOM-Layer
+            if (settings.renderMode !== 'normal') return originalBlob;
 
             try {
                 const tileImg = await createImageBitmap(originalBlob);
@@ -395,44 +401,12 @@
                         continue; // komplett außerhalb dieses Tiles
                     }
                     const opacity = Number(ov.opacity ?? 0.5);
-                    if (settings.renderMode === 'minify') {
-                        // Render kleine Quadrate in Pixelmitte via Super-Sampling auf mctx
-                        const srcCanvas = (settings.paletteMatch && ov.processedCanvas) ? ov.processedCanvas : (() => {
-                            const c=document.createElement('canvas'); c.width=ov.img.naturalWidth; c.height=ov.img.naturalHeight; const cx=c.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=false; cx.drawImage(ov.img,0,0); return c; })();
-                        const sw = srcCanvas.width, sh = srcCanvas.height;
-                        const sx0 = Math.max(0, -drawX), sy0 = Math.max(0, -drawY);
-                        const sx1 = Math.min(sw, TILE_SIZE - drawX), sy1 = Math.min(sh, TILE_SIZE - drawY);
-                        if (sx1>sx0 && sy1>sy0) {
-                            const sctx = srcCanvas.getContext('2d', { willReadFrequently: true });
-                            const imgd = sctx.getImageData(sx0, sy0, sx1 - sx0, sy1 - sy0);
-                            const data = imgd.data; const w = imgd.width;
-                            for (let y=0; y<imgd.height; y++) {
-                                const baseY = (drawY + sy0 + y) * SS + Center;
-                                for (let x=0; x<imgd.width; x++) {
-                                    const i = (y*w + x) * 4;
-                                    const a = data[i+3]; if (a === 0) continue;
-                                    const r=data[i], g=data[i+1], b=data[i+2];
-                                    mctx.globalAlpha = (a/255) * opacity;
-                                    mctx.fillStyle = `rgb(${r},${g},${b})`;
-                                    const baseX = (drawX + sx0 + x) * SS + Center;
-                                    mctx.fillRect(baseX, baseY, 1, 1);
-                                }
-                            }
-                            mctx.globalAlpha = 1;
-                        }
-                    } else {
+                    {
                         ctx.globalAlpha = opacity;
                         const src = (settings.paletteMatch && ov.processedCanvas) ? ov.processedCanvas : ov.img;
                         ctx.drawImage(src, Math.round(drawX), Math.round(drawY));
                         ctx.globalAlpha = 1;
                     }
-                }
-
-                if (settings.renderMode === 'minify' && minCanvas) {
-                    // Downscale auf finalen Tile-Canvas
-                    ctx.imageSmoothingEnabled = false;
-                    ctx.clearRect(0,0,TILE_SIZE,TILE_SIZE);
-                    ctx.drawImage(minCanvas, 0, 0, TILE_SIZE, TILE_SIZE);
                 }
 
                 return await new Promise((resolve, reject) => {
