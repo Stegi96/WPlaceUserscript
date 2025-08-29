@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.17
+// @version      1.18
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -19,7 +19,7 @@
     const CONFIG_URL = "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/overlays.json";
     const TILE_SIZE = 1000; // wie Overlay Pro
     const overlays = {}; // { name: { img, worldX, worldY, offsetX, offsetY, opacity, enabled, processedCanvas } }
-    const settings = { paletteMatch: true, alphaHarden: true, renderMode: 'normal', minifyScale: 3 };
+    const settings = { paletteMatch: true, alphaHarden: true, renderMode: 'normal' };
 
     // Wplace-Palette (Free)
     const WPLACE_FREE = [
@@ -268,6 +268,18 @@
                 // Zeichne Originaltile
                 ctx.drawImage(tileImg, 0, 0, TILE_SIZE, TILE_SIZE);
 
+                // Für Minify: vorbereiteter hochskalierter Canvas
+                let minCanvas = null, mctx = null, SS = 3, Center = 1;
+                if (settings.renderMode === 'minify') {
+                    SS = 3; Center = Math.floor(SS/2);
+                    minCanvas = document.createElement('canvas');
+                    minCanvas.width = TILE_SIZE * SS;
+                    minCanvas.height = TILE_SIZE * SS;
+                    mctx = minCanvas.getContext('2d', { willReadFrequently: true });
+                    mctx.imageSmoothingEnabled = false;
+                    mctx.drawImage(tileImg, 0, 0, minCanvas.width, minCanvas.height);
+                }
+
                 const tileOriginX = chunk1 * TILE_SIZE;
                 const tileOriginY = chunk2 * TILE_SIZE;
 
@@ -279,9 +291,7 @@
                     }
                     const opacity = Number(ov.opacity ?? 0.5);
                     if (settings.renderMode === 'minify') {
-                        // Dot grid at pixel centers using minifyScale
-                        const scale = Math.max(1, Math.floor(settings.minifyScale));
-                        const center = Math.floor(scale / 2);
+                        // Render kleine Quadrate in Pixelmitte via Super-Sampling auf mctx
                         const srcCanvas = (settings.paletteMatch && ov.processedCanvas) ? ov.processedCanvas : (() => {
                             const c=document.createElement('canvas'); c.width=ov.img.naturalWidth; c.height=ov.img.naturalHeight; const cx=c.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=false; cx.drawImage(ov.img,0,0); return c; })();
                         const sw = srcCanvas.width, sh = srcCanvas.height;
@@ -292,21 +302,18 @@
                             const imgd = sctx.getImageData(sx0, sy0, sx1 - sx0, sy1 - sy0);
                             const data = imgd.data; const w = imgd.width;
                             for (let y=0; y<imgd.height; y++) {
-                                const ty = drawY + sy0 + y;
+                                const baseY = (drawY + sy0 + y) * SS + Center;
                                 for (let x=0; x<imgd.width; x++) {
-                                    const tx = drawX + sx0 + x;
-                                    const absX = tileOriginX + tx;
-                                    const absY = tileOriginY + ty;
-                                    if ((absX % scale) !== center || (absY % scale) !== center) continue;
                                     const i = (y*w + x) * 4;
                                     const a = data[i+3]; if (a === 0) continue;
                                     const r=data[i], g=data[i+1], b=data[i+2];
-                                    ctx.globalAlpha = (a/255) * opacity;
-                                    ctx.fillStyle = `rgb(${r},${g},${b})`;
-                                    ctx.fillRect(tx, ty, 1, 1);
+                                    mctx.globalAlpha = (a/255) * opacity;
+                                    mctx.fillStyle = `rgb(${r},${g},${b})`;
+                                    const baseX = (drawX + sx0 + x) * SS + Center;
+                                    mctx.fillRect(baseX, baseY, 1, 1);
                                 }
                             }
-                            ctx.globalAlpha = 1;
+                            mctx.globalAlpha = 1;
                         }
                     } else {
                         ctx.globalAlpha = opacity;
@@ -314,6 +321,13 @@
                         ctx.drawImage(src, Math.round(drawX), Math.round(drawY));
                         ctx.globalAlpha = 1;
                     }
+                }
+
+                if (settings.renderMode === 'minify' && minCanvas) {
+                    // Downscale auf finalen Tile-Canvas
+                    ctx.imageSmoothingEnabled = false;
+                    ctx.clearRect(0,0,TILE_SIZE,TILE_SIZE);
+                    ctx.drawImage(minCanvas, 0, 0, TILE_SIZE, TILE_SIZE);
                 }
 
                 return await new Promise((resolve, reject) => {
@@ -359,9 +373,6 @@
         <option value="normal" selected>Normal</option>
         <option value="minify">Minify</option>
       </select>
-    </label>
-    <label><span>Minify Scale</span>
-      <input id="elaubros-miniscale" type="number" min="1" max="8" step="1" value="3" />
     </label>
     `;
     document.body.appendChild(menu);
@@ -430,17 +441,12 @@
     const palCb = document.getElementById('elaubros-palette');
     const alphaCb = document.getElementById('elaubros-alpha');
     const modeSel = document.getElementById('elaubros-mode');
-    const miniInp = document.getElementById('elaubros-miniscale');
     palCb.addEventListener('change', () => { settings.paletteMatch = palCb.checked; });
     alphaCb.addEventListener('change', () => { settings.alphaHarden = alphaCb.checked; 
         // Neu quantisieren, falls gewünscht
         Object.values(overlays).forEach(o => { if (o.img && o.img.naturalWidth) o.processedCanvas = quantizeToPalette(o.img, settings.alphaHarden); });
     });
     modeSel.addEventListener('change', () => { settings.renderMode = modeSel.value; });
-    miniInp.addEventListener('change', () => {
-        const v = Math.max(1, Math.min(8, Math.floor(Number(miniInp.value)||3)));
-        settings.minifyScale = v; miniInp.value = String(v);
-    });
 
     // JSON laden
     GM_xmlhttpRequest({
