@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.29
+// @version      1.30
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -382,7 +382,7 @@
                 // Zeichne Originaltile
                 ctx.drawImage(tileImg, 0, 0, TILE_SIZE, TILE_SIZE);
 
-                // Für Minify: skaliere Overlay hoch und filtere auf Zellzentrum (Dot-Grid wie Overlay Pro)
+                // Für Minify: zeichne nur Symbolpunkte im hochskalierten Raum (performant: iteriere nur Overlay-Pixel)
                 const MIN_SCALE = 5; // Zellgröße
                 let dotCanvas = null, dotCtx = null;
                 if (settings.renderMode === 'minify') {
@@ -407,31 +407,31 @@
                         // Quelle: quantisierte oder Original-Overlay-Canvas
                         const srcCanvas = (settings.paletteMatch && ov.processedCanvas) ? ov.processedCanvas : (() => {
                             const c=document.createElement('canvas'); c.width=ov.img.naturalWidth; c.height=ov.img.naturalHeight; const cx=c.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=false; cx.drawImage(ov.img,0,0); return c; })();
+                        const sctx = srcCanvas.getContext('2d', { willReadFrequently: true });
                         const sw = srcCanvas.width, sh = srcCanvas.height;
-                        // Overlay skaliert in Dot-Canvas zeichnen
-                        const drawXScaled = Math.round(drawX * MIN_SCALE);
-                        const drawYScaled = Math.round(drawY * MIN_SCALE);
-                        const wScaled = sw * MIN_SCALE;
-                        const hScaled = sh * MIN_SCALE;
-                        dotCtx.drawImage(srcCanvas, 0, 0, sw, sh, drawXScaled, drawYScaled, wScaled, hScaled);
-                        // Filter: nur Zellenzentrum behalten
+                        const imgd = sctx.getImageData(0, 0, sw, sh);
+                        const data = imgd.data; const rowW = imgd.width;
                         const center = Math.floor(MIN_SCALE / 2);
-                        const imgd = dotCtx.getImageData(0, 0, dotCanvas.width, dotCanvas.height);
-                        const data = imgd.data;
-                        const width = dotCanvas.width;
                         let drawn = 0;
-                        for (let i = 0; i < data.length; i += 4) {
-                            const px = (i/4) % width;
-                            const py = Math.floor((i/4) / width);
-                            if ((px % MIN_SCALE === center) && (py % MIN_SCALE === center)) {
-                                // lassen, aber Opazität übernehmen
-                                data[i+3] = Math.round(data[i+3] * opacity);
+                        for (let y=0; y<sh; y++) {
+                            const ty = drawY + y;
+                            if (ty < 0 || ty >= TILE_SIZE) continue;
+                            for (let x=0; x<sw; x++) {
+                                const tx = drawX + x;
+                                if (tx < 0 || tx >= TILE_SIZE) continue;
+                                const idx = (y*rowW + x) * 4;
+                                const a = data[idx+3]; if (a === 0) continue;
+                                const r=data[idx], g=data[idx+1], b=data[idx+2];
+                                dotCtx.globalAlpha = (a/255) * opacity;
+                                dotCtx.fillStyle = `rgb(${r},${g},${b})`;
+                                const baseX = tx * MIN_SCALE + center;
+                                const baseY = ty * MIN_SCALE + center;
+                                // kleines Kreuz (3x3) im Zentrum der 5x5-Zelle
+                                dotCtx.fillRect(baseX-1, baseY, 3, 1);
+                                dotCtx.fillRect(baseX, baseY-1, 1, 3);
                                 drawn++;
-                            } else {
-                                data[i+3] = 0;
                             }
                         }
-                        dotCtx.putImageData(imgd, 0, 0);
                         try { console.debug('ELAUBros minify symbols drawn', drawn, 'on chunk', chunk1, chunk2); } catch {}
                     } else {
                         // Normalmodus: komplettes Bild einzeichnen
