@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.0
-// @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider
+// @version      1.1
+// @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
 // @grant        GM_xmlhttpRequest
@@ -14,8 +14,68 @@
     'use strict';
 
     const CONFIG_URL = "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/overlays.json";
+    const overlays = {}; // für Menüsteuerung und Repositionierung
 
-    const overlays = {}; // gespeichert für Menüsteuerung
+    // Hilfsfunktion: Canvas finden
+    function findWplaceCanvas() {
+        const canvases = Array.from(document.getElementsByTagName('canvas'));
+        if (canvases.length === 0) return null;
+        return canvases.sort((a, b) => (b.width * b.height) - (a.width * a.height))[0];
+    }
+
+    // Transformation des Canvas-Containers auslesen
+    function getCanvasTransformInfo(canvas) {
+        let el = canvas.parentElement;
+        while (el && el !== document.body) {
+            const style = window.getComputedStyle(el);
+            const transform = style.transform || style.webkitTransform;
+            if (transform && transform !== "none") {
+                return {container: el, transform};
+            }
+            el = el.parentElement;
+        }
+        return {container: canvas.parentElement, transform: ""};
+    }
+
+    // Overlay-Positionierung auf Canvas-Container
+    function positionOverlayOnCanvas(img) {
+        const pixelX = parseInt(img.dataset.pixelX);
+        const pixelY = parseInt(img.dataset.pixelY);
+        const offsetX = parseInt(img.dataset.offsetX) || 0;
+        const offsetY = parseInt(img.dataset.offsetY) || 0;
+
+        const canvas = findWplaceCanvas();
+        if (!canvas) return;
+
+        const {container, transform} = getCanvasTransformInfo(canvas);
+
+        // Füge das Overlay dem Container hinzu (nur einmal)
+        if (!img.parentElement || img.parentElement !== container) {
+            container.appendChild(img);
+            img.style.position = "absolute";
+            img.style.pointerEvents = "none";
+            img.style.zIndex = 9999;
+        }
+
+        // Transformation auslesen
+        let scale = 1, transX = 0, transY = 0;
+        if (transform && transform.startsWith("matrix")) {
+            // matrix(a, b, c, d, tx, ty)
+            const m = transform.match(/matrix\(([^)]+)\)/);
+            if (m) {
+                const vals = m[1].split(',').map(Number);
+                scale = vals[0];
+                transX = vals[4];
+                transY = vals[5];
+            }
+        }
+
+        // Position berechnen (im Container)
+        img.style.left = ((pixelX + offsetX) * scale + transX) + "px";
+        img.style.top  = ((pixelY + offsetY) * scale + transY) + "px";
+        img.style.transform = `scale(${scale})`;
+        img.style.transformOrigin = "top left";
+    }
 
     // Menü erstellen
     const menu = document.createElement("div");
@@ -76,7 +136,6 @@
                 if (!config.overlays) return;
 
                 config.overlays.forEach((overlay, index) => {
-
                     // Pixel-Koordinaten aus pixelUrl extrahieren
                     const match = overlay.pixelUrl.match(/x=(\d+)&y=(\d+)/);
                     if (!match) return;
@@ -86,14 +145,14 @@
                     // Overlay-Bild erstellen
                     const img = new Image();
                     img.src = overlay.imageUrl;
-                    img.style.position = "absolute";
-                    img.style.left = (pixelX + (overlay.offsetX || 0)) + "px";
-                    img.style.top  = (pixelY + (overlay.offsetY || 0)) + "px";
                     img.style.opacity = overlay.opacity ?? 0.5;
-                    img.style.pointerEvents = "none";
-                    img.style.zIndex = 9999;
                     img.style.display = "none"; // startet unsichtbar
-                    document.body.appendChild(img);
+
+                    // Koordinaten für spätere Repositionierung speichern
+                    img.dataset.pixelX = pixelX;
+                    img.dataset.pixelY = pixelY;
+                    img.dataset.offsetX = overlay.offsetX || 0;
+                    img.dataset.offsetY = overlay.offsetY || 0;
 
                     overlays[overlay.name || `Overlay ${index+1}`] = img;
 
@@ -121,7 +180,11 @@
                     // Checkbox: Sichtbarkeit
                     checkbox.addEventListener("change", function(e) {
                         const name = e.target.dataset.overlay;
-                        overlays[name].style.display = e.target.checked ? "block" : "none";
+                        const img = overlays[name];
+                        img.style.display = e.target.checked ? "block" : "none";
+                        if (e.target.checked) {
+                            positionOverlayOnCanvas(img);
+                        }
                     });
 
                     // Slider: Transparenz
@@ -132,7 +195,31 @@
                     wrapper.appendChild(label);
                     wrapper.appendChild(slider);
                     menu.appendChild(wrapper);
+                });
 
+                // Repositioniere Overlays bei Zoom/Pan/Resize
+                let lastTransform = "";
+                setInterval(() => {
+                    const canvas = findWplaceCanvas();
+                    if (!canvas) return;
+                    const {transform} = getCanvasTransformInfo(canvas);
+                    if (transform !== lastTransform) {
+                        lastTransform = transform;
+                        Object.values(overlays).forEach(img => {
+                            if (img.style.display !== "none") {
+                                positionOverlayOnCanvas(img);
+                            }
+                        });
+                    }
+                }, 200);
+
+                // Auch bei Fenstergröße-Änderung repositionieren
+                window.addEventListener("resize", () => {
+                    Object.values(overlays).forEach(img => {
+                        if (img.style.display !== "none") {
+                            positionOverlayOnCanvas(img);
+                        }
+                    });
                 });
 
             } catch(e) {
