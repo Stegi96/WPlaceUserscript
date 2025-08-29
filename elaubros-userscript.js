@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.10
+// @version      1.11
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -93,12 +93,6 @@
         const overlayX = parseInt(img.dataset.pixelX) + (parseInt(img.dataset.offsetX) || 0);
         const overlayY = parseInt(img.dataset.pixelY) + (parseInt(img.dataset.offsetY) || 0);
 
-        const camera = getCamera();
-        if (!camera) {
-            // Fallback: Lege einfach im Canvas-Koordinatensystem ab (ggf. ungenau bei Zoom)
-            return positionOverlayOnCanvas(img);
-        }
-
         // Finde das Spielfeld-Canvas
         const canvas = findWplaceCanvas();
         if (!canvas) return;
@@ -106,48 +100,32 @@
         // Viewport-Rechteck des Canvas (CSS-Pixel)
         const rect = canvas.getBoundingClientRect();
 
-        // Berechne Bildschirmposition in CSS-Pixeln; Kamera-Ursprung kann center oder top-left sein.
-        let scale = camera.scale || 1;
-        let camX = camera.x;
-        let camY = camera.y;
-        // Heuristik: Kamera-Koordinaten ggf. von Chunk- in Weltpixel umrechnen
-        if (Math.abs(overlayX) > TILE_SIZE * 10 && Math.abs(camX) < TILE_SIZE * 10) {
-            camX *= TILE_SIZE;
-            camY *= TILE_SIZE;
-        }
-        const centerOffsetX = rect.width / 2;
-        const centerOffsetY = rect.height / 2;
-        const sxCenter = (overlayX - camX) * scale + centerOffsetX;
-        const syCenter = (overlayY - camY) * scale + centerOffsetY;
-        const sxTL = (overlayX - camX) * scale;
-        const syTL = (overlayY - camY) * scale;
-        // Wähle die Variante, die dem Viewport-Zentrum am nächsten liegt (robust)
-        const cx = rect.width / 2, cy = rect.height / 2;
-        const dCenter = Math.hypot(sxCenter - cx, syCenter - cy);
-        const dTL = Math.hypot(sxTL - cx, syTL - cy);
-        const useCenter = dCenter <= dTL;
-        const screenX = useCenter ? sxCenter : sxTL;
-        const screenY = useCenter ? syCenter : syTL;
-
-        // Overlay-Layer erzeugen (global, fixiert im Viewport)
+        // Overlay-Layer erzeugen (als Geschwister des Canvas)
         let overlayLayer = document.getElementById("elaubros-overlay-layer");
         if (!overlayLayer) {
             overlayLayer = document.createElement("div");
             overlayLayer.id = "elaubros-overlay-layer";
-            overlayLayer.style.position = "fixed";
+            overlayLayer.style.position = "absolute";
             overlayLayer.style.pointerEvents = "none";
-            overlayLayer.style.zIndex = 9999;
-            document.body.appendChild(overlayLayer);
+            overlayLayer.style.zIndex = 999999;
+            canvas.parentElement.insertBefore(overlayLayer, canvas.nextSibling);
         }
 
-        // Overlay-Layer exakt über das Canvas im Viewport platzieren (in Seitenkoordinaten)
-        overlayLayer.style.left = rect.left + "px";
-        overlayLayer.style.top = rect.top + "px";
+        // Overlay-Layer exakt über das Canvas im Dokument platzieren (mit Scroll)
+        overlayLayer.style.left = (window.scrollX + rect.left) + "px";
+        overlayLayer.style.top = (window.scrollY + rect.top) + "px";
         overlayLayer.style.width = rect.width + "px";
         overlayLayer.style.height = rect.height + "px";
-        // WICHTIG: keine CSS-Transformation übernehmen – wir rechnen die Kamera selbst ein
-        overlayLayer.style.transform = "none";
-        overlayLayer.style.transformOrigin = "top left";
+        // Transform des Canvas bzw. seines nächsten transformierten Vorfahren übernehmen
+        let transformedEl = canvas;
+        for (let i = 0; i < 5 && transformedEl; i++) {
+            const t = window.getComputedStyle(transformedEl).transform;
+            if (t && t !== 'none') break;
+            transformedEl = transformedEl.parentElement;
+        }
+        const cs = window.getComputedStyle(transformedEl || canvas);
+        overlayLayer.style.transform = cs.transform;
+        overlayLayer.style.transformOrigin = cs.transformOrigin || "top left";
 
         // Overlay-Bild einfügen (nur einmal)
         if (img.parentElement !== overlayLayer) {
@@ -163,12 +141,9 @@
             try {
                 console.log("ELAUBros overlay", {
                     name: img.alt || "",
-                    overlayX, overlayY, scale,
-                    camera: { x: camera.x, y: camera.y, scale: camera.scale },
-                    usedCam: { x: camX, y: camY, scale },
+                    overlayX, overlayY,
                     rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
-                    screen: { x: screenX, y: screenY },
-                    used: useCenter ? "center" : "top-left"
+                    note: 'layer follows canvas CSS transform'
                 });
             } catch(e) {}
             img.dataset._elaubros_logged = "1";
@@ -179,8 +154,8 @@
             dot.style.position = "absolute";
             dot.style.width = "8px";
             dot.style.height = "8px";
-            dot.style.left = `${Math.round(screenX) - 4}px`;
-            dot.style.top = `${Math.round(screenY) - 4}px`;
+            dot.style.left = `${overlayX - 4}px`;
+            dot.style.top = `${overlayY - 4}px`;
             dot.style.background = "#ff3366";
             dot.style.border = "2px solid white";
             dot.style.borderRadius = "50%";
@@ -193,9 +168,9 @@
             }
             img.dataset._elaubros_pinged = "1";
         }
-        img.style.left = `${Math.round(screenX)}px`;
-        img.style.top = `${Math.round(screenY)}px`;
-        img.style.transform = `scale(${scale})`;
+        img.style.left = `${overlayX}px`;
+        img.style.top = `${overlayY}px`;
+        img.style.transform = "";
         img.style.transformOrigin = "top left";
     }
 
