@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.2
+// @version      1.3
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -23,7 +23,7 @@
         return canvases.sort((a, b) => (b.width * b.height) - (a.width * a.height))[0];
     }
 
-    // Overlay direkt über das Canvas legen und synchron transformieren
+    // Overlay-Layer direkt nach dem Canvas einfügen und exakt synchronisieren
     function positionOverlayOnCanvas(img) {
         const pixelX = parseInt(img.dataset.pixelX);
         const pixelY = parseInt(img.dataset.pixelY);
@@ -33,18 +33,25 @@
         const canvas = findWplaceCanvas();
         if (!canvas) return;
 
-        // Overlay-Container erzeugen (nur einmal)
+        // Overlay-Layer erzeugen (nur einmal, als Geschwister vom Canvas)
         let overlayLayer = document.getElementById("elaubros-overlay-layer");
         if (!overlayLayer) {
             overlayLayer = document.createElement("div");
             overlayLayer.id = "elaubros-overlay-layer";
             overlayLayer.style.position = "absolute";
-            overlayLayer.style.left = "0";
-            overlayLayer.style.top = "0";
             overlayLayer.style.pointerEvents = "none";
             overlayLayer.style.zIndex = 9999;
-            canvas.parentElement.appendChild(overlayLayer);
+            // Direkt nach dem Canvas einfügen
+            canvas.parentElement.insertBefore(overlayLayer, canvas.nextSibling);
         }
+
+        // Overlay-Layer exakt wie das Canvas positionieren und transformieren
+        overlayLayer.style.left = canvas.style.left;
+        overlayLayer.style.top = canvas.style.top;
+        overlayLayer.style.width = canvas.width + "px";
+        overlayLayer.style.height = canvas.height + "px";
+        overlayLayer.style.transform = canvas.style.transform;
+        overlayLayer.style.transformOrigin = canvas.style.transformOrigin;
 
         // Overlay-Bild einfügen (nur einmal)
         if (img.parentElement !== overlayLayer) {
@@ -53,18 +60,6 @@
             img.style.pointerEvents = "none";
             img.style.zIndex = 1;
         }
-
-        // Overlay-Layer exakt über das Canvas legen
-        const rect = canvas.getBoundingClientRect();
-        overlayLayer.style.width = canvas.width + "px";
-        overlayLayer.style.height = canvas.height + "px";
-        overlayLayer.style.left = canvas.offsetLeft + "px";
-        overlayLayer.style.top = canvas.offsetTop + "px";
-
-        // Transformation übernehmen
-        const style = window.getComputedStyle(canvas);
-        overlayLayer.style.transform = style.transform;
-        overlayLayer.style.transformOrigin = style.transformOrigin;
 
         // Overlay-Bild exakt auf die gewünschte Pixelposition legen
         img.style.left = (pixelX + offsetX) + "px";
@@ -193,23 +188,15 @@
                     menu.appendChild(wrapper);
                 });
 
-                // Repositioniere Overlays bei Zoom/Pan/Resize
-                let lastTransform = "";
+                // Repositioniere Overlays regelmäßig (z.B. alle 200ms)
                 setInterval(() => {
-                    const canvas = findWplaceCanvas();
-                    if (!canvas) return;
-                    const {transform} = getCanvasTransformInfo(canvas);
-                    if (transform !== lastTransform) {
-                        lastTransform = transform;
-                        Object.values(overlays).forEach(img => {
-                            if (img.style.display !== "none") {
-                                positionOverlayOnCanvas(img);
-                            }
-                        });
-                    }
+                    Object.values(overlays).forEach(img => {
+                        if (img.style.display !== "none") {
+                            positionOverlayOnCanvas(img);
+                        }
+                    });
                 }, 200);
 
-                // Auch bei Fenstergröße-Änderung repositionieren
                 window.addEventListener("resize", () => {
                     Object.values(overlays).forEach(img => {
                         if (img.style.display !== "none") {
