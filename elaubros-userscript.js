@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader(Beta)
 // @namespace    https://github.com/Stegi96
-// @version      1.32.3
+// @version      1.32.4
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -18,7 +18,7 @@
 
 (function() {
     'use strict';
-    try { console.log('[ELAUBros] userscript loaded', { version: '1.32.2' }); } catch {}
+    try { console.log('[ELAUBros] userscript loaded', { version: '1.32.4' }); } catch {}
 
     const CONFIG_URL = "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/overlays.json";
     const TILE_SIZE = 1000; // wie Overlay Pro
@@ -40,6 +40,9 @@
     function colorDist2(r1,g1,b1, r2,g2,b2){const dr=r1-r2,dg=g1-g2,db=b1-b2;return dr*dr+dg*dg+db*db;}
     function nearestPaletteColor(r,g,b){let best=WPLACE_FREE[0],bd=Infinity;for(const c of WPLACE_FREE){const d=colorDist2(r,g,b,c[0],c[1],c[2]);if(d<bd){bd=d;best=c;}}return best;}
     function nearestPaletteIndex(r,g,b){let bestIdx=0,bd=Infinity;for(let i=0;i<WPLACE_FREE.length;i++){const c=WPLACE_FREE[i];const d=colorDist2(r,g,b,c[0],c[1],c[2]);if(d<bd){bd=d;bestIdx=i;}}return bestIdx;}
+
+    // Ergänze Paid-Palette und Symboldaten VOR Nutzung (TDZ vermeiden)
+    // (verschoben nach oben)
 
     // Symbolmuster (Offsets relativ zur Zellmitte) für "Symbols"-Modus
     const SYMBOL_PATTERNS = [
