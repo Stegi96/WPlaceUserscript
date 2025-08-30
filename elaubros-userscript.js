@@ -38,8 +38,8 @@
     ];
 
     function colorDist2(r1,g1,b1, r2,g2,b2){const dr=r1-r2,dg=g1-g2,db=b1-b2;return dr*dr+dg*dg+db*db;}
-    function nearestPaletteColor(r,g,b){let best=WPLACE_FREE[0],bd=Infinity;for(const c of WPLACE_FREE){const d=colorDist2(r,g,b,c[0],c[1],c[2]);if(d<bd){bd=d;best=c;}}return best;}
-    function nearestPaletteIndex(r,g,b){let bestIdx=0,bd=Infinity;for(let i=0;i<WPLACE_FREE.length;i++){const c=WPLACE_FREE[i];const d=colorDist2(r,g,b,c[0],c[1],c[2]);if(d<bd){bd=d;bestIdx=i;}}return bestIdx;}
+    function nearestPaletteColor(r,g,b){let best=ALL_COLORS[0],bd=Infinity;for(const c of ALL_COLORS){const d=colorDist2(r,g,b,c[0],c[1],c[2]);if(d<bd){bd=d;best=c;}}return best;}
+    function nearestPaletteIndex(r,g,b){let bestIdx=0,bd=Infinity;for(let i=0;i<ALL_COLORS.length;i++){const c=ALL_COLORS[i];const d=colorDist2(r,g,b,c[0],c[1],c[2]);if(d<bd){bd=d;bestIdx=i;}}return bestIdx;}
 
     // Full palette + symbol tiles (must be defined before use)
     const WPLACE_PAID = [
