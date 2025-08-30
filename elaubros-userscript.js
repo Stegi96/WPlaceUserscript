@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader(Beta)
 // @namespace    https://github.com/Stegi96
-// @version      1.32.4
+// @version      1.32.5
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -18,7 +18,7 @@
 
 (function() {
     'use strict';
-    try { console.log('[ELAUBros] userscript loaded', { version: '1.32.4' }); } catch {}
+    try { console.log('[ELAUBros] userscript loaded', { version: '1.32.5' }); } catch {}
 
     const CONFIG_URL = "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/overlays.json";
     const TILE_SIZE = 1000; // wie Overlay Pro
@@ -766,25 +766,3 @@
     });
 
 })();
-    const WPLACE_PAID = [
-        [170,170,170],[165,14,30],[250,128,114],[228,92,26],[156,132,49],[197,173,49],[232,212,95],
-        [74,107,58],[90,148,74],[132,197,115],[15,121,159],[187,250,242],[125,199,255],[77,49,184],
-        [74,66,132],[122,113,196],[181,174,241],[155,82,73],[209,128,120],[250,182,164],[219,164,99],
-        [123,99,82],[156,132,107],[214,181,148],[209,128,81],[255,197,165],[109,100,63],[148,140,107],
-        [205,197,158],[51,57,65],[109,117,141],[179,185,209]
-    ];
-    const ALL_COLORS = [...WPLACE_FREE, ...WPLACE_PAID];
-    const colorIndexMap = new Map(ALL_COLORS.map((c,i)=>[c.join(','), i]));
-    function findColorIndexLUT(r,g,b){
-        let best=-1, bestD=Infinity;
-        for(let i=0;i<ALL_COLORS.length;i++){
-            const c=ALL_COLORS[i];
-            const d=colorDist2(r,g,b,c[0],c[1],c[2]);
-            if(d<bestD){bestD=d;best=i;}
-        }
-        return best<0?0:best;
-    }
-    const SYMBOL_W = 5;
-    const SYMBOL_H = 5;
-    const SYMBOL_TILES = new Uint32Array([4897444,4756004,15241774,11065002,15269550,33209205,15728622,15658734,33226431,33391295,32641727,15589098,11516906,9760338,15399560,4685802,15587182,29206876,3570904,15259182,29224831,21427311,22511061,15161013,4667844,11392452,11375466,6812424,5225454,29197179,18285009,31850982,19267878,16236308,33481548,22708917,14352822,7847326,7652956,22501038,28457653,9179234,30349539,4685269,18295249,26843769,24483191,5211003,14829567,17971345,28873275,4681156,21392581,7460636,23013877,29010254,18846257,21825364,29017787,4357252,23057550,26880179,5242308,15237450]);
-    const MINIFY_SCALE_SYMBOL = 7;
