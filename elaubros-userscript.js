@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader(Beta)
 // @namespace    https://github.com/Stegi96
-// @version      1.32.1
+// @version      1.32.2
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -438,7 +438,7 @@
                         const sw = srcCanvas.width, sh = srcCanvas.height;
                         const imgd = sctx.getImageData(0, 0, sw, sh);
                         const data = imgd.data; const rowW = imgd.width;
-                        const centerX = (settings.renderMode === 'symbols') ? (MIN_SCALE - SYMBOL_W >> 1) : Math.floor(MIN_SCALE / 2);
+                        const centerX = (settings.renderMode === 'symbols') ? ((MIN_SCALE - SYMBOL_W) >> 1) : Math.floor(MIN_SCALE / 2);
                         const centerY = centerX;
                         let drawn = 0;
                         for (let y=0; y<sh; y++) {
@@ -495,7 +495,7 @@
                         ctx.globalAlpha = 1;
                     }
                 }
-                if (settings.renderMode === 'minify' && scaledCanvas) {
+                if ((settings.renderMode === 'minify' || settings.renderMode === 'symbols') && scaledCanvas) {
                     // Ersetze die Tile durch die hochskalierte Version (Seite skaliert beim Rendern herunter)
                     // Exportiere direkt den Inhalt der skalierten Canvas
                     return await new Promise((resolve, reject) => {
