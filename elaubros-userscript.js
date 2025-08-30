@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Wplace ELAUBros Overlay Loader(Beta)
+// @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.32.6
+// @version      1.33
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -18,7 +18,7 @@
 
 (function() {
     'use strict';
-    try { console.log('[ELAUBros] userscript loaded', { version: '1.32.6' }); } catch {}
+    try { console.log('[ELAUBros] userscript loaded', { version: '1.33' }); } catch {}
 
     const CONFIG_URL = "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/overlays.json";
     const TILE_SIZE = 1000; // wie Overlay Pro
