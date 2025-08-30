@@ -18,6 +18,15 @@
         "offsetX": 0,
         "offsetY": 0,
         "opacity": 0
+    },
+    {
+        "version": 1,
+        "name": "DemonSlayer",
+        "imageUrl": "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/images/DemonSlayer.png",
+        "pixelUrl": "https://backend.wplace.live/s0/pixel/1088/677?x=931&y=906",
+        "offsetX": 0,
+        "offsetY": 0,
+        "opacity": 0.7
     } 
 
   ]
