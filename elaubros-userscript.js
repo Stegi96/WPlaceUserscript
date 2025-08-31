@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader(Beta)
 // @namespace    https://github.com/Stegi96
-// @version      1.33.1
+// @version      1.33.2
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -18,11 +18,11 @@
 
 (function() {
     'use strict';
-    const DEV = false; // Debug-Logs aktivieren: true setzen
-    if (DEV) { try { console.log('[ELAUBros] userscript loaded', { version: '1.33.1' }); } catch(_) {} }
+    const DEV = false; // Enable debug logs: set to true
+    if (DEV) { try { console.log('[ELAUBros] userscript loaded', { version: '1.33.2' }); } catch(_) {} }
 
     const CONFIG_URL = "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/overlays.json";
-    const TILE_SIZE = 1000; // wie Overlay Pro
+    const TILE_SIZE = 1000;
     const overlays = {}; // { name: { img, worldX, worldY, offsetX, offsetY, opacity, enabled, processedCanvas } }
     const settings = { paletteMatch: true, alphaHarden: true, renderMode: 'normal' };
     const LS_KEY = 'elaubros_state_v1';
@@ -31,7 +31,7 @@
     })();
     function saveState(){ try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(_) {} }
 
-    // Wplace-Palette (Free)
+    // Wplace palette (Free)
     // Palette and symbol data adapted from Wplace Overlay Pro (GPLv3)
     const WPLACE_FREE = [
         [0,0,0],[60,60,60],[120,120,120],[210,210,210],[255,255,255],
@@ -71,26 +71,26 @@
     const SYMBOL_TILES = new Uint32Array([4897444,4756004,15241774,11065002,15269550,33209205,15728622,15658734,33226431,33391295,32641727,15589098,11516906,9760338,15399560,4685802,15587182,29206876,3570904,15259182,29224831,21427311,22511061,15161013,4667844,11392452,11375466,6812424,5225454,29197179,18285009,31850982,19267878,16236308,33481548,22708917,14352822,7847326,7652956,22501038,28457653,9179234,30349539,4685269,18295249,26843769,24483191,5211003,14829567,17971345,28873275,4681156,21392581,7460636,23013877,29010254,18846257,21825364,29017787,4357252,23057550,26880179,5242308,15237450]);
     const MINIFY_SCALE_SYMBOL = 7;
 
-    // Ergänze Paid-Palette und Symboldaten VOR Nutzung (TDZ vermeiden)
+    // Ensure constants are defined before first use (avoid TDZ)
     // (verschoben nach oben)
 
-    // Symbolmuster (Offsets relativ zur Zellmitte) für "Symbols"-Modus
+    // Symbol patterns (offsets relative to cell center) for "Symbols" mode
     const SYMBOL_PATTERNS = [
         // Plus
         [[0,0],[-1,0],[1,0],[0,-1],[0,1]],
         // X
         [[0,0],[-1,-1],[1,1],[-1,1],[1,-1]],
-        // Quadrat (klein)
+        // Small square
         [[0,0],[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,1],[1,-1],[-1,1]],
-        // T oben
+        // T (top)
         [[0,0],[-1,0],[1,0],[0,1]],
         // L
         [[0,0],[1,0],[0,1]],
-        // I vertikal
+        // I vertical
         [[0,-1],[0,0],[0,1]],
         // I horizontal
         [[-1,0],[0,0],[1,0]],
-        // Punkt
+        // Dot
         [[0,0]]
     ];
 
@@ -111,297 +111,20 @@
         }catch(e){console.warn('quantize failed',e); return null;}
     }
 
-    // Hilfsfunktion: Canvas finden
+    // Helper: find the main game canvas
     function findWplaceCanvas() {
         const canvases = Array.from(document.getElementsByTagName('canvas'));
         if (canvases.length === 0) return null;
         return canvases.sort((a, b) => (b.width * b.height) - (a.width * a.height))[0];
     }
 
-    // Overlay-Layer direkt nach dem Canvas einfügen und exakt synchronisieren
-    function positionOverlayOnCanvas(img) {
-        const pixelX = parseInt(img.dataset.pixelX);
-        const pixelY = parseInt(img.dataset.pixelY);
-        const offsetX = parseInt(img.dataset.offsetX) || 0;
-        const offsetY = parseInt(img.dataset.offsetY) || 0;
+    // Legacy DOM overlay helpers removed (tile-based rendering only)
 
-        const canvas = findWplaceCanvas();
-        if (!canvas) return;
+    // Camera helper removed; not needed for tile-based compositing
 
-        // Overlay-Layer erzeugen (nur einmal, als Geschwister vom Canvas)
-        let overlayLayer = document.getElementById("elaubros-overlay-layer");
-        if (!overlayLayer) {
-            overlayLayer = document.createElement("div");
-            overlayLayer.id = "elaubros-overlay-layer";
-            overlayLayer.style.position = "absolute";
-            overlayLayer.style.pointerEvents = "none";
-            overlayLayer.style.zIndex = 999999;
-            // Direkt nach dem Canvas einfügen
-            canvas.parentElement.insertBefore(overlayLayer, canvas.nextSibling);
-        }
+    // Legacy DOM minify/positioning code removed
 
-        // Exakte Position und Größe des Canvas im Dokument bestimmen
-        const rect = canvas.getBoundingClientRect();
-        const docLeft = window.scrollX + rect.left;
-        const docTop = window.scrollY + rect.top;
-
-        overlayLayer.style.left = docLeft + "px";
-        overlayLayer.style.top = docTop + "px";
-        overlayLayer.style.width = rect.width + "px";
-        overlayLayer.style.height = rect.height + "px";
-
-        // Transformation übernehmen (wichtig!)
-        const style = window.getComputedStyle(canvas);
-        overlayLayer.style.transform = style.transform;
-        overlayLayer.style.transformOrigin = style.transformOrigin;
-
-        // Overlay-Bild einfügen (nur einmal)
-        if (img.parentElement !== overlayLayer) {
-            overlayLayer.appendChild(img);
-            img.style.position = "absolute";
-            img.style.pointerEvents = "none";
-            img.style.zIndex = 1;
-        }
-
-        // Overlay-Bild exakt auf die gewünschte Pixelposition legen
-        img.style.left = (pixelX + offsetX) + "px";
-        img.style.top = (pixelY + offsetY) + "px";
-        img.style.transform = ""; // kein eigenes scale!
-        img.style.transformOrigin = "top left";
-    }
-
-    // Hilfsfunktion: Kamera-Infos holen (wie Overlay Pro)
-    function getCamera() {
-        try {
-            const w = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
-            if (w.store && w.store.state && w.store.state.camera) {
-                return w.store.state.camera;
-            }
-        } catch (e) { /* ignore */ }
-        return null;
-    }
-
-    // Minify DOM-Layer (kleine Quadrate in Pixelmitte)
-    function ensureMinifyLayer(rect) {
-        let layer = document.getElementById('elaubros-minify-layer');
-        if (!layer) {
-            layer = document.createElement('canvas');
-            layer.id = 'elaubros-minify-layer';
-            layer.style.position = 'fixed';
-            layer.style.pointerEvents = 'none';
-            layer.style.zIndex = 999998;
-            layer.style.imageRendering = 'pixelated';
-            document.body.appendChild(layer);
-        }
-        if (rect) {
-            layer.style.left = rect.left + 'px';
-            layer.style.top = rect.top + 'px';
-            layer.width = Math.max(1, Math.floor(rect.width));
-            layer.height = Math.max(1, Math.floor(rect.height));
-        }
-        return layer.getContext('2d', { willReadFrequently: true });
-    }
-
-    let _minifyTimer = null;
-    let _lastCam = { x: null, y: null, scale: null, w: null, h: null };
-    function startMinifyLoop() {
-        if (_minifyTimer) return;
-        _minifyTimer = setInterval(renderMinifyOnce, 200);
-    }
-    function stopMinifyLoop() {
-        if (_minifyTimer) { clearInterval(_minifyTimer); _minifyTimer = null; }
-        const layer = document.getElementById('elaubros-minify-layer');
-        if (layer) layer.remove();
-    }
-
-    function renderMinifyOnce() {
-        if (settings.renderMode !== 'minify') return;
-        const canvas = findWplaceCanvas();
-        if (!canvas) return;
-        const rect = canvas.getBoundingClientRect();
-        const cam = getCamera();
-        if (!cam || cam.x == null || cam.y == null) return;
-
-        // Nur neu zeichnen, wenn sich Kamera/Rect geändert haben
-        if (_lastCam.x === cam.x && _lastCam.y === cam.y && _lastCam.scale === cam.scale && _lastCam.w === rect.width && _lastCam.h === rect.height) return;
-        _lastCam = { x: cam.x, y: cam.y, scale: cam.scale, w: rect.width, h: rect.height };
-
-        const ctx = ensureMinifyLayer(rect);
-        ctx.clearRect(0,0,ctx.canvas.width, ctx.canvas.height);
-        ctx.imageSmoothingEnabled = false;
-
-        let scale = Number(cam.scale) || 1;
-        let camX = Number(cam.x), camY = Number(cam.y);
-        const centerOffsetX = rect.width / 2;
-        const centerOffsetY = rect.height / 2;
-        // Effektive CSS-Skalierung aus transform in Vorfahrenkette ermitteln
-        function findTransformScale(el){
-            let node = el, depth=0;
-            while(node && depth < 6){
-                const tf = getComputedStyle(node).transform;
-                if (tf && tf !== 'none'){
-                    const mm = tf.match(/matrix\(([-0-9.eE,\s]+)\)/);
-                    if (mm){
-                        const p = mm[1].split(',').map(s=>parseFloat(s));
-                        const a=p[0], b=p[1];
-                        const s = Math.hypot(a,b);
-                        if (s>0) return s;
-                    }
-                }
-                node = node.parentElement; depth++;
-            }
-            return 1;
-        }
-        const cssScaleFromTransform = findTransformScale(canvas);
-        // zusätzliche Heuristik über Canvas-Größe
-        const cssPerCanvasPx = (canvas.width > 0) ? (rect.width / canvas.width) : 1;
-        // Beste Schätzung pro Weltpixel in CSS-Pixeln
-        const cssPerWorldPx = Math.max(cssScaleFromTransform, cssPerCanvasPx, scale);
-        // Kreuz-Arme: etwa 50% der sichtbaren Pixelbreite, Linienbreite 1 px
-        const arm = Math.max(1, Math.round(cssPerWorldPx * 0.5 / 2)); // halbe Armlänge
-        const thick = 1;
-
-        for (const ov of Object.values(overlays)) {
-            if (!ov.enabled || !ov.img || ov.img.naturalWidth === 0) continue;
-            const src = (settings.paletteMatch && ov.processedCanvas) ? ov.processedCanvas : (() => {
-                const c=document.createElement('canvas'); c.width=ov.img.naturalWidth; c.height=ov.img.naturalHeight; const cx=c.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=false; cx.drawImage(ov.img,0,0); return c; })();
-            const sctx = src.getContext('2d', { willReadFrequently: true });
-            const imgd = sctx.getImageData(0, 0, src.width, src.height);
-            const data = imgd.data; const w = imgd.width; const h = imgd.height;
-            for (let y=0; y<h; y++) {
-                const wy = ov.worldY + y;
-                for (let x=0; x<w; x++) {
-                    const i = (y*w + x) * 4;
-                    const a = data[i+3]; if (a === 0) continue;
-                    const r=data[i], g=data[i+1], b=data[i+2];
-                    const wx = ov.worldX + x;
-                    // Heuristik: Wenn Kamera in "Chunks" ist, in Weltpixel umrechnen
-                    if (Math.abs(wx) > TILE_SIZE*10 && Math.abs(camX) < TILE_SIZE*10) { camX *= TILE_SIZE; camY *= TILE_SIZE; }
-                    const sx = (wx - camX) * scale + centerOffsetX;
-                    const sy = (wy - camY) * scale + centerOffsetY;
-                    if (sx < 0 || sy < 0 || sx >= rect.width || sy >= rect.height) continue;
-                    ctx.globalAlpha = (a/255) * Number(ov.opacity ?? 0.5);
-                    ctx.fillStyle = `rgb(${r},${g},${b})`;
-                    const cx = Math.round(sx), cy = Math.round(sy);
-                    // Horizontaler Arm
-                    ctx.fillRect(cx - arm, cy, arm*2 + 1, thick);
-                    // Vertikaler Arm
-                    ctx.fillRect(cx, cy - arm, thick, arm*2 + 1);
-                }
-            }
-            ctx.globalAlpha = 1;
-        }
-    }
-
-    // Positionierung wie Overlay Pro: Weltkoordinaten → Bildschirmkoordinaten (DOM-Overlay; derzeit nur Debug)
-    function positionOverlayLikeOverlayPro(img) {
-        const overlayX = parseInt(img.dataset.pixelX) + (parseInt(img.dataset.offsetX) || 0);
-        const overlayY = parseInt(img.dataset.pixelY) + (parseInt(img.dataset.offsetY) || 0);
-
-        // Finde das Spielfeld-Canvas
-        const canvas = findWplaceCanvas();
-        if (!canvas) return;
-
-        // Viewport-Rechteck des Canvas (CSS-Pixel)
-        const rect = canvas.getBoundingClientRect();
-
-        // Kamera lesen; wenn nicht verfügbar, fallback
-        const camera = getCamera();
-        if (!camera || camera.x == null || camera.y == null) {
-            return positionOverlayOnCanvas(img);
-        }
-        let scale = Number(camera.scale) || 1;
-        let camX = Number(camera.x);
-        let camY = Number(camera.y);
-        // Heuristik: Falls Kamera in Chunks statt Pixeln ist
-        if (Math.abs(overlayX) > TILE_SIZE * 10 && Math.abs(camX) < TILE_SIZE * 10) {
-            camX *= TILE_SIZE;
-            camY *= TILE_SIZE;
-        }
-        const centerOffsetX = rect.width / 2;
-        const centerOffsetY = rect.height / 2;
-        const sxCenter = (overlayX - camX) * scale + centerOffsetX;
-        const syCenter = (overlayY - camY) * scale + centerOffsetY;
-        const sxTL = (overlayX - camX) * scale;
-        const syTL = (overlayY - camY) * scale;
-        const cx = rect.width / 2, cy = rect.height / 2;
-        const dCenter = Math.hypot(sxCenter - cx, syCenter - cy);
-        const dTL = Math.hypot(sxTL - cx, syTL - cy);
-        const useCenter = dCenter <= dTL;
-        const screenX = useCenter ? sxCenter : sxTL;
-        const screenY = useCenter ? syCenter : syTL;
-
-        // Overlay-Layer erzeugen (als Geschwister des Canvas)
-        let overlayLayer = document.getElementById("elaubros-overlay-layer");
-        if (!overlayLayer) {
-            overlayLayer = document.createElement("div");
-            overlayLayer.id = "elaubros-overlay-layer";
-            overlayLayer.style.position = "absolute";
-            overlayLayer.style.pointerEvents = "none";
-            overlayLayer.style.zIndex = 999999;
-            canvas.parentElement.insertBefore(overlayLayer, canvas.nextSibling);
-        }
-
-        // Overlay-Layer exakt über das Canvas im Dokument platzieren (mit Scroll)
-        overlayLayer.style.left = (window.scrollX + rect.left) + "px";
-        overlayLayer.style.top = (window.scrollY + rect.top) + "px";
-        overlayLayer.style.width = rect.width + "px";
-        overlayLayer.style.height = rect.height + "px";
-        // Transform des Canvas bzw. seines nächsten transformierten Vorfahren übernehmen
-        // Keine Transform übernehmen – wir rechnen screenX/screenY selbst
-        overlayLayer.style.transform = "none";
-        overlayLayer.style.transformOrigin = "top left";
-
-        // Overlay-Bild einfügen (nur einmal)
-        if (img.parentElement !== overlayLayer) {
-            overlayLayer.appendChild(img);
-            img.style.position = "absolute";
-            img.style.pointerEvents = "none";
-            img.style.zIndex = 1;
-            img.style.imageRendering = "pixelated";
-        }
-
-        // Overlay-Bild exakt auf die berechnete Position legen
-        if (DEV && !img.dataset._elaubros_logged) {
-            try {
-                console.log("ELAUBros overlay", {
-                    name: img.alt || "",
-                    overlayX, overlayY,
-                    camera: { x: camX, y: camY, scale },
-                    rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
-                    screen: { x: Math.round(screenX), y: Math.round(screenY) },
-                    mode: useCenter ? 'center' : 'top-left'
-                });
-            } catch(e) {}
-            img.dataset._elaubros_logged = "1";
-        }
-        // Kurzer Ping-Marker, um die Ankerposition sichtbar zu machen
-        if (!img.dataset._elaubros_pinged) {
-            const dot = document.createElement("div");
-            dot.style.position = "absolute";
-            dot.style.width = "8px";
-            dot.style.height = "8px";
-            dot.style.left = `${Math.round(screenX) - 4}px`;
-            dot.style.top = `${Math.round(screenY) - 4}px`;
-            dot.style.background = "#ff3366";
-            dot.style.border = "2px solid white";
-            dot.style.borderRadius = "50%";
-            dot.style.boxShadow = "0 0 6px rgba(0,0,0,0.6)";
-            dot.style.pointerEvents = "none";
-            const layer = document.getElementById("elaubros-overlay-layer");
-            if (layer) {
-                layer.appendChild(dot);
-                setTimeout(() => dot.remove(), 1200);
-            }
-            img.dataset._elaubros_pinged = "1";
-        }
-        img.style.left = `${Math.round(screenX)}px`;
-        img.style.top = `${Math.round(screenY)}px`;
-        img.style.transform = `scale(${scale})`;
-        img.style.transformOrigin = "top left";
-    }
-
-    // Tile-Hook wie Overlay Pro: fängt Tile-Requests ab und zeichnet Overlays hinein
+    // Tile hook (like Overlay Pro): intercept tile requests and compose overlays
     function installTileHook() {
         if (window._elaubros_hook_installed) return;
         window._elaubros_hook_installed = true;
@@ -414,9 +137,7 @@
             try {
                 const u = new URL(urlStr, location.href);
                 if (u.hostname !== "backend.wplace.live") return null;
-                // Beispiele:
-                //  - /files/s0/tiles/1088/678.png
-                //  - /files/1088/678.png   (Fallback)
+                
                 let m = u.pathname.match(/\/files\/[^/]+\/tiles\/(\d+)\/(\d+)\.png$/i);
                 if (!m) m = u.pathname.match(/\/(\d+)\/(\d+)\.png$/i);
                 if (!m) return null;
@@ -425,7 +146,7 @@
         }
 
         async function composeTile(originalBlob, chunk1, chunk2) {
-            // Sammle aktive Overlays
+            // Collect active overlays
             const active = Object.values(overlays).filter(o => o.enabled && o.img && o.img.naturalWidth > 0);
             if (active.length === 0) return originalBlob;
 
@@ -436,10 +157,10 @@
                 canvas.height = TILE_SIZE;
                 const ctx = canvas.getContext('2d', { willReadFrequently: true });
                 ctx.imageSmoothingEnabled = false;
-                // Zeichne Originaltile
+                // Draw original tile
                 ctx.drawImage(tileImg, 0, 0, TILE_SIZE, TILE_SIZE);
 
-                // Für Minify/Symbols: skaliere die Tile hoch (Pro-Pipeline)
+                
                 const MIN_SCALE = (settings.renderMode === 'symbols') ? MINIFY_SCALE_SYMBOL : 5;
                 let scaledCanvas = null, scaledCtx = null;
                 if (settings.renderMode === 'minify' || settings.renderMode === 'symbols') {
@@ -450,7 +171,7 @@
                     scaledCanvas.height = tileH;
                     scaledCtx = scaledCanvas.getContext('2d', { willReadFrequently: true });
                     scaledCtx.imageSmoothingEnabled = false;
-                    // Originaltile hochskaliert als Basis zeichnen
+                    
                     scaledCtx.drawImage(tileImg, 0, 0, tileW, tileH);
                 }
 
@@ -461,11 +182,11 @@
                     const drawX = (ov.worldX + (ov.offsetX||0)) - tileOriginX;
                     const drawY = (ov.worldY + (ov.offsetY||0)) - tileOriginY;
                     if ((drawX + ov.img.naturalWidth) <= 0 || (drawY + ov.img.naturalHeight) <= 0 || drawX >= TILE_SIZE || drawY >= TILE_SIZE) {
-                        continue; // komplett außerhalb dieses Tiles
+                        continue; // completely outside this tile
                     }
                     const opacity = Number(ov.opacity ?? 0.5);
                     if ((settings.renderMode === 'minify' || settings.renderMode === 'symbols') && scaledCtx) {
-                        // Quelle: quantisierte oder Original-Overlay-Canvas
+                        
                         const srcCanvas = (settings.paletteMatch && ov.processedCanvas) ? ov.processedCanvas : (() => {
                             const c=document.createElement('canvas'); c.width=ov.img.naturalWidth; c.height=ov.img.naturalHeight; const cx=c.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingEnabled=false; cx.drawImage(ov.img,0,0); return c; })();
                         const sctx = srcCanvas.getContext('2d', { willReadFrequently: true });
@@ -487,8 +208,6 @@
                                 const baseX = tx * MIN_SCALE;
                                 const baseY = ty * MIN_SCALE;
                                 if (settings.renderMode === 'symbols') {
-                                    // Exakte Symbols-Logik wie Overlay Pro
-                                    // Bestimme Farbindex (perfekt, wenn bereits paletteMatch erfolgte)
                                     const colorKey = `${r},${g},${b}`;
                                     const isPerfect = settings.paletteMatch;
                                     const colorIndex = isPerfect && colorIndexMap.has(colorKey) ? colorIndexMap.get(colorKey) : findColorIndexLUT(r,g,b);
@@ -509,7 +228,6 @@
                                         }
                                     }
                                 } else {
-                                    // Minify: farbiger Punkt im Zentrum
                                     const c = settings.paletteMatch ? nearestPaletteColor(r,g,b) : [r,g,b];
                                     scaledCtx.globalAlpha = (a/255) * opacity;
                                     scaledCtx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
@@ -522,7 +240,7 @@
                         }
                         if (DEV) { try { console.debug('ELAUBros minify symbols drawn', drawn, 'on chunk', chunk1, chunk2); } catch(_) {} }
                     } else {
-                        // Normalmodus: komplettes Bild einzeichnen
+                        // Normal mode: draw full image
                         ctx.globalAlpha = opacity;
                         const src = (settings.paletteMatch && ov.processedCanvas) ? ov.processedCanvas : ov.img;
                         ctx.drawImage(src, Math.round(drawX), Math.round(drawY));
@@ -530,8 +248,7 @@
                     }
                 }
                 if ((settings.renderMode === 'minify' || settings.renderMode === 'symbols') && scaledCanvas) {
-                    // Ersetze die Tile durch die hochskalierte Version (Seite skaliert beim Rendern herunter)
-                    // Exportiere direkt den Inhalt der skalierten Canvas
+                    // Return the upscaled tile (page will downscale when rendering)
                     return await new Promise((resolve, reject) => {
                         scaledCanvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed (scaled)')), 'image/png');
                     });
@@ -564,11 +281,11 @@
                 return res;
             }
         };
-        // In Page-Kontext hängen
+        // Attach to page context
         page.fetch = hookedFetch;
         window.fetch = hookedFetch;
 
-        // Zusätzlich: Image.src-Hook, falls Tiles via <img> geladen werden
+        // Also hook Image.src if tiles load via <img>
         try {
             const desc = Object.getOwnPropertyDescriptor(Image.prototype, 'src');
             if (desc && desc.configurable) {
@@ -579,7 +296,7 @@
                             const val = String(v);
                             const m = matchTileUrl(val);
                             if (m) {
-                                // Lade Original, compose, ersetze durch Blob-URL
+                                // Fetch original, compose, replace with blob URL
                                 NATIVE_FETCH(val).then(r => r.blob()).then(b => composeTile(b, m.chunk1, m.chunk2)).then(finalBlob => {
                                     const url = URL.createObjectURL(finalBlob);
                                     desc.set.call(this, url);
@@ -595,7 +312,7 @@
         } catch (e) { try { console.warn('ELAUBros Image hook failed', e); } catch {} }
     }
 
-    // Menü erstellen
+    // Build in-page menu (UI)
     const menu = document.createElement("div");
     menu.id = "elaubros-menu";
     menu.innerHTML = `
@@ -673,7 +390,7 @@
         }
     `);
 
-    // Menü minimieren/maximieren (nur Body ein-/ausblenden)
+    // Collapse/expand menu (hide/show body only)
     const headerEl = document.getElementById('elaubros-header');
     const bodyEl = document.getElementById('elaubros-body');
     const toggleBtn = document.getElementById('elaubros-toggle');
@@ -688,7 +405,7 @@
       collapsed = !collapsed; state.menuCollapsed = collapsed; saveState(); applyCollapsed(collapsed);
     });
 
-    // Menü-Position (drag)
+    // Make menu draggable; persist position
     (function(){
       if (state.menuPos && typeof state.menuPos.left === 'number' && typeof state.menuPos.top === 'number') {
         menu.style.left = state.menuPos.left + 'px';
@@ -697,7 +414,7 @@
       }
       let dragging=false, startX=0, startY=0, startLeft=0, startTop=0;
       headerEl.addEventListener('mousedown',(ev)=>{
-        if (ev && ev.target && ev.target.id === 'elaubros-toggle') return; // nicht den Button ziehen
+        if (ev && ev.target && ev.target.id === 'elaubros-toggle') return; // do not drag when clicking the toggle
         dragging=true; startX=ev.clientX; startY=ev.clientY;
         const rect = menu.getBoundingClientRect();
         startLeft = rect.left; startTop = rect.top;
@@ -708,11 +425,11 @@
       function onUp(){ dragging=false; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); const rect=menu.getBoundingClientRect(); state.menuPos={left: Math.round(rect.left), top: Math.round(rect.top)}; saveState(); }
     })();
 
-    // Globale Optionen
+    // Global options
     const palCb = document.getElementById('elaubros-palette');
     const alphaCb = document.getElementById('elaubros-alpha');
     const modeSel = document.getElementById('elaubros-mode');
-    // Initiale Werte aus State
+    // Initialize settings from persisted state
     if (typeof state.settings === 'object') {
       if (typeof state.settings.paletteMatch === 'boolean') { palCb.checked = state.settings.paletteMatch; settings.paletteMatch = palCb.checked; }
       if (typeof state.settings.alphaHarden === 'boolean') { alphaCb.checked = state.settings.alphaHarden; settings.alphaHarden = alphaCb.checked; }
@@ -720,17 +437,16 @@
     }
     palCb.addEventListener('change', () => { settings.paletteMatch = palCb.checked; state.settings = Object.assign({}, state.settings, { paletteMatch: palCb.checked }); saveState(); });
     alphaCb.addEventListener('change', () => { settings.alphaHarden = alphaCb.checked; state.settings = Object.assign({}, state.settings, { alphaHarden: alphaCb.checked }); saveState(); 
-        // Neu quantisieren, falls gewünscht
+        // Re-quantize if desired
         Object.values(overlays).forEach(o => { if (o.img && o.img.naturalWidth) o.processedCanvas = quantizeToPalette(o.img, settings.alphaHarden); });
     });
     modeSel.addEventListener('change', () => { 
         settings.renderMode = modeSel.value; state.settings = Object.assign({}, state.settings, { renderMode: modeSel.value }); saveState();
-        // Tile-basierter Minify; DOM-Layer nicht nutzen
-        stopMinifyLoop();
+        // Tile-based modes only; no DOM overlay
     });
-    // no checkbox for symbols; use dropdown mode
+    // No extra checkbox for symbols; use dropdown mode
 
-    // JSON laden
+    // Load overlays JSON
     GM_xmlhttpRequest({
         method: "GET",
         url: CONFIG_URL,
@@ -740,8 +456,8 @@
                 if (!config.overlays) return;
 
                 config.overlays.forEach((overlay, index) => {
-                    // Vollständige Koordinaten (Chunk + Position) aus pixelUrl extrahieren
-                    // Beispiel: https://backend.wplace.live/s0/pixel/1088/678?x=254&y=673
+                    // Extract world coordinates (chunk + position) from pixelUrl
+                    // Example: https://backend.wplace.live/s0/pixel/1088/678?x=254&y=673
                     const full = overlay.pixelUrl || "";
                     const m = full.match(/\/pixel\/(\d+)\/(\d+)\?x=(\d+)&y=(\d+)/);
                     if (!m) return;
@@ -752,7 +468,7 @@
                     const pixelX = chunk1 * TILE_SIZE + posX;
                     const pixelY = chunk2 * TILE_SIZE + posY;
 
-                    // Overlay-Bild laden (CORS-sicher) und palettieren
+                    // Load overlay image (CORS-safe) and quantize
                     const img = new Image();
                     (async () => {
                         try {
@@ -769,9 +485,9 @@
                         if (overlays[name]) overlays[name].processedCanvas = qc;
                     });
                     img.style.opacity = overlay.opacity ?? 0.5;
-                    img.style.display = "none"; // startet unsichtbar
+                    img.style.display = "none"; // start hidden
 
-                    // Koordinaten für spätere Repositionierung speichern
+                    // Store world coordinates for later compositing
                     img.dataset.pixelX = String(pixelX);
                     img.dataset.pixelY = String(pixelY);
                     img.dataset.offsetX = overlay.offsetX || 0;
@@ -789,7 +505,7 @@
                         enabled: false
                     };
 
-                    // Menü-Eintrag
+                    // Menu entry per overlay
                     const wrapper = document.createElement("div");
 
                     const checkbox = document.createElement("input");
@@ -810,14 +526,14 @@
                     slider.step = "0.05";
                     slider.value = String(overlays[name].opacity);
 
-                    // Initialzustand aus State
+                    // Initialize per-overlay state
                     if (!state.overlays) state.overlays = {};
                     if (state.overlays[name]) {
                       if (typeof state.overlays[name].enabled === 'boolean') checkbox.checked = state.overlays[name].enabled;
                       if (typeof state.overlays[name].opacity === 'number') slider.value = String(state.overlays[name].opacity);
                     }
 
-                    // Checkbox: Aktivieren/Deaktivieren (wir rendern in Tiles)
+                    // Checkbox: enable/disable (tile compositing)
                     checkbox.addEventListener("change", function(e) {
                         const name = e.target.dataset.overlay;
                         const ov = overlays[name];
@@ -826,7 +542,7 @@
                         saveState();
                     });
 
-                    // Slider: Transparenz (wir nutzen für Tile-Compositing)
+                    // Slider: opacity (tile compositing)
                     slider.addEventListener("input", function(e) {
                         overlays[name].opacity = Number(e.target.value);
                         state.overlays[name] = Object.assign({}, state.overlays[name], { enabled: checkbox.checked, opacity: overlays[name].opacity });
@@ -838,10 +554,9 @@
                     document.getElementById('elaubros-body').appendChild(wrapper);
                 });
 
-                // Installiere Tile-Hook (Normal + Minify)
+                // Install tile hook (Normal/Minify/Symbols)
                 installTileHook();
-                // Kein DOM-Layer für Minify
-                stopMinifyLoop();
+                // No DOM overlay for minify
 
             } catch(e) {
                 console.error("Fehler beim Parsen der Overlay JSON:", e);
