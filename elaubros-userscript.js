@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Wplace ELAUBros Overlay Loader
+// @name         Wplace ELAUBros Overlay Loader(Beta)
 // @namespace    https://github.com/Stegi96
-// @version      1.33
+// @version      1.33.1
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -18,12 +18,17 @@
 
 (function() {
     'use strict';
-    try { console.log('[ELAUBros] userscript loaded', { version: '1.33' }); } catch {}
+    try { console.log('[ELAUBros] userscript loaded', { version: '1.33.1' }); } catch {}
 
     const CONFIG_URL = "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/overlays.json";
     const TILE_SIZE = 1000; // wie Overlay Pro
     const overlays = {}; // { name: { img, worldX, worldY, offsetX, offsetY, opacity, enabled, processedCanvas } }
     const settings = { paletteMatch: true, alphaHarden: true, renderMode: 'normal' };
+    const LS_KEY = 'elaubros_state_v1';
+    const state = (function(){
+        try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch(_) { return {}; }
+    })();
+    function saveState(){ try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(_) {} }
 
     // Wplace-Palette (Free)
     // Palette and symbol data adapted from Wplace Overlay Pro (GPLv3)
@@ -592,16 +597,22 @@
     // Menü erstellen
     const menu = document.createElement("div");
     menu.id = "elaubros-menu";
-    menu.innerHTML = `<strong>ELAUBros Overlays</strong> <button id="elaubros-toggle">–</button><br>
-    <label><span>Palette-Match</span> <input type="checkbox" id="elaubros-palette" checked></label>
-    <label><span>Alpha hart</span> <input type="checkbox" id="elaubros-alpha" checked></label>
-    <label><span>Modus</span>
-      <select id="elaubros-mode">
-        <option value="normal" selected>Normal</option>
-        <option value="minify">Minify</option>
-        <option value="symbols">Symbols</option>
-      </select>
-    </label>
+    menu.innerHTML = `
+      <div id="elaubros-header">
+        <span class="title">ELAUBros Overlays</span>
+        <button id="elaubros-toggle">–</button>
+      </div>
+      <div id="elaubros-body">
+        <label><span>Palette-Match</span> <input type="checkbox" id="elaubros-palette" checked></label>
+        <label><span>Alpha hart</span> <input type="checkbox" id="elaubros-alpha" checked></label>
+        <label><span>Modus</span>
+          <select id="elaubros-mode">
+            <option value="normal">Normal</option>
+            <option value="minify">Minify</option>
+            <option value="symbols">Symbols</option>
+          </select>
+        </label>
+      </div>
     `;
     document.body.appendChild(menu);
 
@@ -615,9 +626,11 @@
             padding: 10px;
             border-radius: 8px;
             font-size: 14px;
-            z-index: 10000;
+            z-index: 1000001;
             max-width: 220px;
         }
+        #elaubros-header { display: flex; align-items: center; gap: 8px; justify-content: space-between; cursor: move; user-select: none; }
+        #elaubros-header .title { font-weight: 700; }
         #elaubros-menu label {
             display: flex;
             align-items: center;
@@ -638,6 +651,7 @@
             border: none;
             border-radius: 4px;
             cursor: pointer;
+            padding: 2px 6px;
         }
         #elaubros-menu label span { flex: 1; }
         #elaubros-menu select, #elaubros-menu input[type="number"] {
@@ -658,24 +672,58 @@
         }
     `);
 
-    // Menü minimieren/maximieren
-    document.getElementById("elaubros-toggle").addEventListener("click", function() {
-        const children = Array.from(menu.children).slice(1); // erstes Element ist Titel
-        children.forEach(el => el.style.display = (el.style.display === "none" ? "block" : "none"));
-        this.textContent = this.textContent === "–" ? "+" : "–";
+    // Menü minimieren/maximieren (nur Body ein-/ausblenden)
+    const headerEl = document.getElementById('elaubros-header');
+    const bodyEl = document.getElementById('elaubros-body');
+    const toggleBtn = document.getElementById('elaubros-toggle');
+    function applyCollapsed(collapsed){
+      bodyEl.style.display = collapsed ? 'none' : 'block';
+      toggleBtn.textContent = collapsed ? '+' : '–';
+    }
+    let collapsed = !!state.menuCollapsed;
+    applyCollapsed(collapsed);
+    toggleBtn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      collapsed = !collapsed; state.menuCollapsed = collapsed; saveState(); applyCollapsed(collapsed);
     });
+
+    // Menü-Position (drag)
+    (function(){
+      if (state.menuPos && typeof state.menuPos.left === 'number' && typeof state.menuPos.top === 'number') {
+        menu.style.left = state.menuPos.left + 'px';
+        menu.style.top = state.menuPos.top + 'px';
+        menu.style.right = 'auto';
+      }
+      let dragging=false, startX=0, startY=0, startLeft=0, startTop=0;
+      headerEl.addEventListener('mousedown',(ev)=>{
+        if (ev && ev.target && ev.target.id === 'elaubros-toggle') return; // nicht den Button ziehen
+        dragging=true; startX=ev.clientX; startY=ev.clientY;
+        const rect = menu.getBoundingClientRect();
+        startLeft = rect.left; startTop = rect.top;
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+      function onMove(ev){ if(!dragging) return; const dx=ev.clientX-startX, dy=ev.clientY-startY; const left = Math.max(0, Math.min(window.innerWidth-40, startLeft+dx)); const top = Math.max(0, Math.min(window.innerHeight-24, startTop+dy)); menu.style.left=left+'px'; menu.style.top=top+'px'; menu.style.right='auto'; }
+      function onUp(){ dragging=false; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); const rect=menu.getBoundingClientRect(); state.menuPos={left: Math.round(rect.left), top: Math.round(rect.top)}; saveState(); }
+    })();
 
     // Globale Optionen
     const palCb = document.getElementById('elaubros-palette');
     const alphaCb = document.getElementById('elaubros-alpha');
     const modeSel = document.getElementById('elaubros-mode');
-    palCb.addEventListener('change', () => { settings.paletteMatch = palCb.checked; });
-    alphaCb.addEventListener('change', () => { settings.alphaHarden = alphaCb.checked; 
+    // Initiale Werte aus State
+    if (typeof state.settings === 'object') {
+      if (typeof state.settings.paletteMatch === 'boolean') { palCb.checked = state.settings.paletteMatch; settings.paletteMatch = palCb.checked; }
+      if (typeof state.settings.alphaHarden === 'boolean') { alphaCb.checked = state.settings.alphaHarden; settings.alphaHarden = alphaCb.checked; }
+      if (typeof state.settings.renderMode === 'string') { modeSel.value = state.settings.renderMode; settings.renderMode = modeSel.value; }
+    }
+    palCb.addEventListener('change', () => { settings.paletteMatch = palCb.checked; state.settings = Object.assign({}, state.settings, { paletteMatch: palCb.checked }); saveState(); });
+    alphaCb.addEventListener('change', () => { settings.alphaHarden = alphaCb.checked; state.settings = Object.assign({}, state.settings, { alphaHarden: alphaCb.checked }); saveState(); 
         // Neu quantisieren, falls gewünscht
         Object.values(overlays).forEach(o => { if (o.img && o.img.naturalWidth) o.processedCanvas = quantizeToPalette(o.img, settings.alphaHarden); });
     });
     modeSel.addEventListener('change', () => { 
-        settings.renderMode = modeSel.value; 
+        settings.renderMode = modeSel.value; state.settings = Object.assign({}, state.settings, { renderMode: modeSel.value }); saveState();
         // Tile-basierter Minify; DOM-Layer nicht nutzen
         stopMinifyLoop();
     });
@@ -761,21 +809,32 @@
                     slider.step = "0.05";
                     slider.value = String(overlays[name].opacity);
 
+                    // Initialzustand aus State
+                    if (!state.overlays) state.overlays = {};
+                    if (state.overlays[name]) {
+                      if (typeof state.overlays[name].enabled === 'boolean') checkbox.checked = state.overlays[name].enabled;
+                      if (typeof state.overlays[name].opacity === 'number') slider.value = String(state.overlays[name].opacity);
+                    }
+
                     // Checkbox: Aktivieren/Deaktivieren (wir rendern in Tiles)
                     checkbox.addEventListener("change", function(e) {
                         const name = e.target.dataset.overlay;
                         const ov = overlays[name];
                         ov.enabled = !!e.target.checked;
+                        state.overlays[name] = Object.assign({}, state.overlays[name], { enabled: ov.enabled, opacity: Number(slider.value) });
+                        saveState();
                     });
 
                     // Slider: Transparenz (wir nutzen für Tile-Compositing)
                     slider.addEventListener("input", function(e) {
                         overlays[name].opacity = Number(e.target.value);
+                        state.overlays[name] = Object.assign({}, state.overlays[name], { enabled: checkbox.checked, opacity: overlays[name].opacity });
+                        saveState();
                     });
 
                     wrapper.appendChild(label);
                     wrapper.appendChild(slider);
-                    menu.appendChild(wrapper);
+                    document.getElementById('elaubros-body').appendChild(wrapper);
                 });
 
                 // Installiere Tile-Hook (Normal + Minify)
