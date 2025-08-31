@@ -2,6 +2,8 @@
 
 Ein Tampermonkey‑Userscript, das Overlays für https://wplace.live direkt in die Kacheln rendert (wie „Overlay Pro“), inklusive UI, Transparenz‑Regler, Paletten‑Matching und drei Darstellungsmodi (Normal, Minify, Symbols).
 
+> Note: This userscript is primarily built for the ELAUBros alliance. It is public for transparency and reuse, but its defaults/overlays are tailored to ELAUBros needs and may have limited value for outsiders.
+
 ## Features
 
 - Overlay‑Quelle: Lädt mehrere Overlays aus einer JSON‑Datei (`overlays.json`).
