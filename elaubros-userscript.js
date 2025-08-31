@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader(Beta)
 // @namespace    https://github.com/Stegi96
-// @version      1.33.2
+// @version      1.33.3
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -19,7 +19,7 @@
 (function() {
     'use strict';
     const DEV = false; // Enable debug logs: set to true
-    if (DEV) { try { console.log('[ELAUBros] userscript loaded', { version: '1.33.2' }); } catch(_) {} }
+    if (DEV) { try { console.log('[ELAUBros] userscript loaded', { version: '1.33.3' }); } catch(_) {} }
 
     const CONFIG_URL = "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/overlays.json";
     const TILE_SIZE = 1000;
@@ -30,6 +30,24 @@
         try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch(_) { return {}; }
     })();
     function saveState(){ try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(_) {} }
+
+    // Force tiles to reload by cache-busting <img> tile sources
+    function refreshTiles() {
+      try {
+        const imgs = Array.from(document.images || []);
+        const now = Date.now().toString();
+        imgs.forEach(img => {
+          if (!img || !img.src) return;
+          try {
+            const u = new URL(img.src, location.href);
+            if (u.hostname === 'backend.wplace.live' && /\/files\//.test(u.pathname) && /\.png$/i.test(u.pathname)) {
+              u.searchParams.set('r', now);
+              img.src = u.toString();
+            }
+          } catch(_) {}
+        });
+      } catch(_) {}
+    }
 
     // Wplace palette (Free)
     // Palette and symbol data adapted from Wplace Overlay Pro (GPLv3)
@@ -318,7 +336,10 @@
     menu.innerHTML = `
       <div id="elaubros-header">
         <span class="title">ELAUBros Overlays</span>
-        <button id="elaubros-toggle">–</button>
+        <div class="actions">
+          <button id="elaubros-refresh" title="Refresh tiles">↻</button>
+          <button id="elaubros-toggle" title="Collapse">–</button>
+        </div>
       </div>
       <div id="elaubros-body">
         <label><span>Palette-Match</span> <input type="checkbox" id="elaubros-palette" checked></label>
@@ -347,8 +368,9 @@
             z-index: 1000001;
             max-width: 220px;
         }
-        #elaubros-header { display: flex; align-items: center; gap: 8px; justify-content: space-between; cursor: move; user-select: none; }
+        #elaubros-header { display: flex; align-items: center; gap: 8px; justify-content: space-between; user-select: none; }
         #elaubros-header .title { font-weight: 700; }
+        #elaubros-header .actions { display: inline-flex; gap: 6px; }
         #elaubros-menu label {
             display: flex;
             align-items: center;
@@ -394,6 +416,7 @@
     const headerEl = document.getElementById('elaubros-header');
     const bodyEl = document.getElementById('elaubros-body');
     const toggleBtn = document.getElementById('elaubros-toggle');
+    const refreshBtn = document.getElementById('elaubros-refresh');
     function applyCollapsed(collapsed){
       bodyEl.style.display = collapsed ? 'none' : 'block';
       toggleBtn.textContent = collapsed ? '+' : '–';
@@ -404,6 +427,7 @@
       e.stopPropagation();
       collapsed = !collapsed; state.menuCollapsed = collapsed; saveState(); applyCollapsed(collapsed);
     });
+    if (refreshBtn) refreshBtn.addEventListener('click', (e)=>{ e.stopPropagation(); refreshTiles(); });
 
     // Make menu draggable; persist position
     (function(){
@@ -413,8 +437,10 @@
         menu.style.right = 'auto';
       }
       let dragging=false, startX=0, startY=0, startLeft=0, startTop=0;
+      // Drag by clicking anywhere on header except the buttons
       headerEl.addEventListener('mousedown',(ev)=>{
         if (ev && ev.target && ev.target.id === 'elaubros-toggle') return; // do not drag when clicking the toggle
+        if (ev && ev.target && ev.target.id === 'elaubros-refresh') return; // do not drag when clicking refresh
         dragging=true; startX=ev.clientX; startY=ev.clientY;
         const rect = menu.getBoundingClientRect();
         startLeft = rect.left; startTop = rect.top;
@@ -532,6 +558,8 @@
                       if (typeof state.overlays[name].enabled === 'boolean') checkbox.checked = state.overlays[name].enabled;
                       if (typeof state.overlays[name].opacity === 'number') slider.value = String(state.overlays[name].opacity);
                     }
+                    overlays[name].enabled = checkbox.checked;
+                    overlays[name].opacity = Number(slider.value);
 
                     // Checkbox: enable/disable (tile compositing)
                     checkbox.addEventListener("change", function(e) {
@@ -540,6 +568,7 @@
                         ov.enabled = !!e.target.checked;
                         state.overlays[name] = Object.assign({}, state.overlays[name], { enabled: ov.enabled, opacity: Number(slider.value) });
                         saveState();
+                        refreshTiles();
                     });
 
                     // Slider: opacity (tile compositing)
@@ -547,11 +576,12 @@
                         overlays[name].opacity = Number(e.target.value);
                         state.overlays[name] = Object.assign({}, state.overlays[name], { enabled: checkbox.checked, opacity: overlays[name].opacity });
                         saveState();
+                        refreshTiles();
                     });
 
                     wrapper.appendChild(label);
                     wrapper.appendChild(slider);
-                    document.getElementById('elaubros-body').appendChild(wrapper);
+                    (document.getElementById('elaubros-body') || menu).appendChild(wrapper);
                 });
 
                 // Install tile hook (Normal/Minify/Symbols)
