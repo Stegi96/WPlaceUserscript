@@ -18,7 +18,8 @@
 
 (function() {
     'use strict';
-    try { console.log('[ELAUBros] userscript loaded', { version: '1.33.1' }); } catch {}
+    const DEV = false; // Debug-Logs aktivieren: true setzen
+    if (DEV) { try { console.log('[ELAUBros] userscript loaded', { version: '1.33.1' }); } catch(_) {} }
 
     const CONFIG_URL = "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/overlays.json";
     const TILE_SIZE = 1000; // wie Overlay Pro
@@ -361,7 +362,7 @@
         }
 
         // Overlay-Bild exakt auf die berechnete Position legen
-        if (!img.dataset._elaubros_logged) {
+        if (DEV && !img.dataset._elaubros_logged) {
             try {
                 console.log("ELAUBros overlay", {
                     name: img.alt || "",
@@ -519,7 +520,7 @@
                                 drawn++;
                             }
                         }
-                        try { console.debug('ELAUBros minify symbols drawn', drawn, 'on chunk', chunk1, chunk2); } catch {}
+                        if (DEV) { try { console.debug('ELAUBros minify symbols drawn', drawn, 'on chunk', chunk1, chunk2); } catch(_) {} }
                     } else {
                         // Normalmodus: komplettes Bild einzeichnen
                         ctx.globalAlpha = opacity;
@@ -555,7 +556,7 @@
                 if (!ct.includes('image')) return res;
                 const blob = await res.clone().blob();
                 // Debug: signal that hook is active
-                try { console.debug('ELAUBros hook composing tile', url, match); } catch {}
+                if (DEV) { try { console.debug('ELAUBros hook composing tile', url, match); } catch(_) {} }
                 const finalBlob = await composeTile(blob, match.chunk1, match.chunk2);
                 return new Response(finalBlob, { status: res.status, statusText: res.statusText, headers: { 'Content-Type': 'image/png' } });
             } catch (e) {
@@ -589,7 +590,7 @@
                         return desc.set.call(this, v);
                     }
                 });
-                console.debug('ELAUBros Image.src hook installed');
+                if (DEV) { try { console.debug('ELAUBros Image.src hook installed'); } catch(_) {} }
             }
         } catch (e) { try { console.warn('ELAUBros Image hook failed', e); } catch {} }
     }
@@ -762,7 +763,7 @@
                         }
                     })();
                     img.addEventListener('load', () => {
-                        console.log('ELAUBros overlay image loaded:', overlay.name, img.naturalWidth + 'x' + img.naturalHeight);
+                        if (DEV) { try { console.log('ELAUBros overlay image loaded:', overlay.name, img.naturalWidth + 'x' + img.naturalHeight); } catch(_) {} }
                         const name = overlay.name || `Overlay ${index+1}`;
                         const qc = quantizeToPalette(img, settings.alphaHarden);
                         if (overlays[name]) overlays[name].processedCanvas = qc;
