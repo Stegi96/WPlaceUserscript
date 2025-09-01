@@ -27,7 +27,16 @@
         "offsetX": 0,
         "offsetY": 0,
         "opacity": 0.7
-    } 
+    },
+    {
+        "version": 1,
+        "name": "fckzoo",
+        "imageUrl": "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/images/fckzoo.png",
+        "pixelUrl": "https://backend.wplace.live/s0/pixel/1088/678?x=165&y=17",
+        "offsetX": 0,
+        "offsetY": 0,
+        "opacity": 1
+    }
 
   ]
 }
