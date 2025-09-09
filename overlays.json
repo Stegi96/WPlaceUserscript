@@ -45,6 +45,15 @@
         "offsetX": 0,
         "offsetY": 0,
         "opacity": 1
+    },
+    {
+        "version": 1,
+        "name": "leaf_logo",
+        "imageUrl": "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/images/leaf_logo.png",
+        "pixelUrl": "https://backend.wplace.live/s0/pixel/1088/677?x=329&y=791",
+        "offsetX": 0,
+        "offsetY": 0,
+        "opacity": 1
     }
 
   ]
