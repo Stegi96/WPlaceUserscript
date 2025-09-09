@@ -36,6 +36,15 @@
         "offsetX": 0,
         "offsetY": 0,
         "opacity": 1
+    },
+    {
+        "version": 1,
+        "name": "Rammstein",
+        "imageUrl": "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/images/rammstein.png",
+        "pixelUrl": "https://backend.wplace.live/s0/pixel/1088/677?x=42&y=762",
+        "offsetX": 0,
+        "offsetY": 0,
+        "opacity": 1
     }
 
   ]
