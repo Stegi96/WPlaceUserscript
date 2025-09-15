@@ -81,6 +81,15 @@
       "offsetX": 0,
       "offsetY": 0,
       "opacity": 1
+    },
+    {
+      "version": 1,
+      "name": "Sunny",
+      "imageUrl": "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/images/Sunny.png",
+      "pixelUrl": "https://backend.wplace.live/s0/pixel/1088/677?x=486&y=709",
+      "offsetX": 0,
+      "offsetY": 0,
+      "opacity": 1
     }
   ]
 }
