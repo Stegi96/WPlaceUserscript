@@ -19,7 +19,7 @@
 (function() {
     'use strict';
     const DEV = false; // Enable debug logs: set to true
-    if (DEV) { try { console.log('[ELAUBros] userscript loaded', { version: '1.34.1' }); } catch(_) {} }
+    if (DEV) { try { console.log('[ELAUBros] userscript loaded', { version: '1.35' }); } catch(_) {} }
 
     const CONFIG_URL = "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/overlays.json";
     const TILE_SIZE = 1000;
