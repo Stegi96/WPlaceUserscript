@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Wplace ELAUBros Overlay Loader
+// @name         Wplace ELAUBros Overlay Loader(Beta)
 // @namespace    https://github.com/Stegi96
 // @version      1.34.1
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
