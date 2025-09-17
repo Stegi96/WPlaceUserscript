@@ -90,6 +90,15 @@
       "offsetX": 0,
       "offsetY": 0,
       "opacity": 1
+    },
+    {
+      "version": 1,
+      "name": "Nico",
+      "imageUrl": "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/images/nico.png",
+      "pixelUrl": "https://backend.wplace.live/s0/pixel/1088/677?x=749&y=595",
+      "offsetX": 0,
+      "offsetY": 0,
+      "opacity": 1
     }
   ]
 }
