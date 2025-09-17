@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wplace ELAUBros Overlay Loader
 // @namespace    https://github.com/Stegi96
-// @version      1.34
+// @version      1.34.1
 // @description  Lädt alle Overlays aus einer JSON-Datei für Wplace.live, positioniert nach Pixel-URL, mit Menü und Transparenz-Slider, korrekt auf dem Spielfeld
 // @author       ELAUBros
 // @match        https://wplace.live/*
@@ -19,7 +19,7 @@
 (function() {
     'use strict';
     const DEV = false; // Enable debug logs: set to true
-    if (DEV) { try { console.log('[ELAUBros] userscript loaded', { version: '1.34' }); } catch(_) {} }
+    if (DEV) { try { console.log('[ELAUBros] userscript loaded', { version: '1.34.1' }); } catch(_) {} }
 
     const CONFIG_URL = "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/overlays.json";
     const TILE_SIZE = 1000;
@@ -351,6 +351,7 @@
             <option value="symbols">Symbols</option>
           </select>
         </label>
+        <div id="elaubros-overlays"></div>
       </div>
     `;
     document.body.appendChild(menu);
@@ -409,6 +410,14 @@
         #elaubros-menu select option {
             background: #1f1f1f;
             color: #fff;
+        }
+        /* Scrollable overlays list */
+        #elaubros-overlays {
+            max-height: 280px;
+            overflow-y: auto;
+            margin-top: 8px;
+            padding-right: 4px; /* space for scrollbar */
+            -webkit-overflow-scrolling: touch;
         }
     `);
 
@@ -481,6 +490,7 @@
                 const config = JSON.parse(response.responseText);
                 if (!config.overlays) return;
 
+                const listEl = document.getElementById('elaubros-overlays') || document.getElementById('elaubros-body') || menu;
                 config.overlays.forEach((overlay, index) => {
                     // Extract world coordinates (chunk + position) from pixelUrl
                     // Example: https://backend.wplace.live/s0/pixel/1088/678?x=254&y=673
@@ -581,7 +591,7 @@
 
                     wrapper.appendChild(label);
                     wrapper.appendChild(slider);
-                    (document.getElementById('elaubros-body') || menu).appendChild(wrapper);
+                    listEl.appendChild(wrapper);
                 });
 
                 // Install tile hook (Normal/Minify/Symbols)
