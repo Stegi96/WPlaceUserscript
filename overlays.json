@@ -99,6 +99,79 @@
       "offsetX": 0,
       "offsetY": 0,
       "opacity": 1
+    },
+    {
+      "version": 1,
+      "name": "Wächter Links",
+      "imageUrl": "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/images/Hdr_Links.png",
+      "pixelUrl": "https://backend.wplace.live/s0/pixel/1088/676?x=142&y=908",
+      "offsetX": 0,
+      "offsetY": 0,
+      "opacity": 1
+    },
+    {
+      "version": 1,
+      "name": "Hobbit1",
+      "imageUrl": "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/images/Hobbit_1.png",
+      "pixelUrl": "https://backend.wplace.live/s0/pixel/1088/676?x=309&y=908",
+      "offsetX": 0,
+      "offsetY": 0,
+      "opacity": 1
+    },
+    {
+      "version": 1,
+      "name": "Hobbit2",
+      "imageUrl": "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/images/Hobbit_2.png",
+      "pixelUrl": "https://backend.wplace.live/s0/pixel/1088/676?x=504&y=908",
+      "offsetX": 0,
+      "offsetY": 0,
+      "opacity": 1
+    },
+    {
+      "version": 1,
+      "name": "Hobbit3",
+      "imageUrl": "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/images/Hobbit_3.png",
+      "pixelUrl": "https://backend.wplace.live/s0/pixel/1088/676?x=699&y=908",
+      "offsetX": 0,
+      "offsetY": 0,
+      "opacity": 1
+    },
+    {
+      "version": 1,
+      "name": "HdR1",
+      "imageUrl": "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/images/HdR_1.png",
+      "pixelUrl": "https://backend.wplace.live/s0/pixel/1088/677?x=309&y=158",
+      "offsetX": 0,
+      "offsetY": 0,
+      "opacity": 1
+    },
+    {
+      "version": 1,
+      "name": "HdR2",
+      "imageUrl": "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/images/Hdr_2.png",
+      "pixelUrl": "https://backend.wplace.live/s0/pixel/1088/677?x=504&y=158",
+      "offsetX": 0,
+      "offsetY": 0,
+      "opacity": 1
+    },
+    {
+      "version": 1,
+      "name": "Hdr3",
+      "imageUrl": "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/images/HdR_3.png",
+      "pixelUrl": "https://backend.wplace.live/s0/pixel/1088/677?x=699&y=158",
+      "offsetX": 0,
+      "offsetY": 0,
+      "opacity": 1
+    },
+    {
+      "version": 1,
+      "name": "Wächter Rechts",
+      "imageUrl": "https://raw.githubusercontent.com/Stegi96/WPlaceUserscript/refs/heads/main/images/Hdr_Rechts.png",
+      "pixelUrl": "https://backend.wplace.live/s0/pixel/1088/676?x=894&y=908",
+      "offsetX": 0,
+      "offsetY": 0,
+      "opacity": 1
     }
+
   ]
 }
